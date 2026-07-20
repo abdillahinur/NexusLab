@@ -1,0 +1,87 @@
+<!--
+SPDX-FileCopyrightText: 2026 NexusLab contributors
+SPDX-License-Identifier: Apache-2.0
+-->
+
+# NexusLab Architecture
+
+## Status
+
+This document describes the approved architectural direction at Cluster 0. Subsystem details will be added only as their implementation clusters reach review. The [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
+
+## System boundary
+
+NexusLab is a single-process, deterministic discrete-event simulator for comparative experiments on synthetic AI training infrastructure. The simulation core must remain usable without the future web backend. Production integrations are future backend adapters and must not leak simulated internals into controller interfaces.
+
+## Planned component flow
+
+```text
+scenario definition
+  -> experiment orchestrator
+  -> deterministic simulation core
+  -> cluster/fabric and workload engines
+  -> pluggable policy layer
+  -> telemetry and metrics
+  -> result store and replay
+  -> CLI, reports, and replay dashboard
+```
+
+## Approved initial decisions
+
+| Area | Decision |
+|---|---|
+| Core language | C++20 |
+| Required development target | Linux or WSL2 |
+| Build system | CMake with Ninja presets |
+| Tests | GoogleTest and GoogleMock 1.17.0 |
+| Human-authored configuration | YAML through yaml-cpp 0.9.0 |
+| Replay serialization | Protobuf deferred until Cluster 12 |
+| Repository model | Monorepo |
+| Simulation style | Single-process discrete-event simulation |
+| Simulated time | Integer nanoseconds |
+| Transfer fidelity | Chunk level |
+| Initial topology | Clos |
+| Scale targets | 512 GPUs initial; 2,048 stretch |
+| Initial collective | Ring AllReduce |
+| MVP routing | ECMP, least-loaded, queue-aware |
+| Initial scheduler | First fit |
+| Anchor failure | Spine-link failure |
+| Headline metrics | Job completion time, GPU idle time, queue depth, link utilization, drops |
+| First UI release | Replay only; no live streaming or cluster control |
+| Performance thresholds | Set after the Cluster 1 local baseline |
+| Portfolio-ready MVP target | 16 weeks, subordinate to architecture-gate quality |
+| License | Apache-2.0 |
+
+## Determinism boundary
+
+Given identical configuration, seed, build version, and policy version, a run must produce identical output unless nondeterministic execution is explicitly enabled. Event ordering, random-number generation, identifiers, policy tie-breaking, and serialization must therefore be deterministic by construction.
+
+## Policy boundaries
+
+Routing, scheduling, congestion control, collective planning, and failure recovery will use stable replaceable interfaces. Policies receive bounded views or snapshots, do not mutate simulation state directly, and emit inspectable decision records.
+
+## Data and safety boundaries
+
+- Initial workloads and results are synthetic.
+- The initial release replays completed experiments and does not control a live cluster.
+- Scenario sizes and inputs must be validated before allocations occur.
+- Any future real-cluster action requires an explicit operating mode and independent safety controls.
+
+## Cluster 0 repository shape
+
+```text
+NexusLab/
+├── cmake/                  build policy and pinned dependencies
+├── docs/adr/               architecture decision records
+├── scripts/                Linux/WSL2 developer workflows
+├── simulator/              C++ targets, tests, and benchmarks
+├── .github/                CI and contribution templates
+├── CMakeLists.txt
+└── CMakePresets.json
+```
+
+Directories for policies, scenarios, schemas, services, web, and analysis will be introduced by the clusters that own them, avoiding empty scaffolding that implies unsupported behavior.
+
+## Architecture gates
+
+Every cluster ends with a written review of correctness, abstraction, performance, extensibility, failure behavior, and documentation. A gate records evidence and an explicit `Proceed: YES` or `Proceed: NO`; elapsed schedule time cannot waive it.

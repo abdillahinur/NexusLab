@@ -1,0 +1,55 @@
+{
+  "version": 2,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "FETCHCONTENT_UPDATES_DISCONNECTED": "ON",
+        "NEXUSLAB_BUILD_TESTS": "ON",
+        "NEXUSLAB_BUILD_BENCHMARKS": "ON",
+        "NEXUSLAB_WARNINGS_AS_ERRORS": "ON"
+      }
+    },
+    {
+      "name": "dev",
+      "displayName": "Developer debug build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "displayName": "Release build",
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "sanitize",
+      "displayName": "ASan and UBSan build",
+      "inherits": "dev",
+      "cacheVariables": {
+        "NEXUSLAB_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
+      "name": "lint",
+      "displayName": "clang-tidy build",
+      "inherits": "dev",
+      "cacheVariables": {
+        "NEXUSLAB_ENABLE_CLANG_TIDY": "ON"
+      }
+    }
+  ]
+}

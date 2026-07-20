@@ -1,0 +1,110 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} build and test
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: GCC
+            cc: gcc
+            cxx: g++
+          - compiler: Clang
+            cc: clang
+            cxx: clang++
+    env:
+      CC: ${{ matrix.cc }}
+      CXX: ${{ matrix.cxx }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      - name: Configure
+        run: cmake --preset dev
+
+      - name: Build
+        run: cmake --build build/dev
+
+      - name: Test
+        run: ctest --test-dir build/dev --output-on-failure
+
+  sanitizers:
+    name: ASan and UBSan
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build
+
+      - name: Configure
+        run: cmake --preset sanitize
+
+      - name: Build
+        run: cmake --build build/sanitize
+
+      - name: Test
+        run: ctest --test-dir build/sanitize --output-on-failure
+
+  quality:
+    name: Formatting and clang-tidy
+    runs-on: ubuntu-24.04
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install quality tools
+        run: sudo apt-get update && sudo apt-get install -y clang clang-format clang-tidy cmake ninja-build
+
+      - name: Check formatting
+        run: bash scripts/format.sh --check
+
+      - name: Run clang-tidy build
+        run: bash scripts/lint.sh
+
+  benchmark-smoke:
+    name: Benchmark harness smoke test
+    runs-on: ubuntu-24.04
+    env:
+      CC: gcc
+      CXX: g++
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+
+      - name: Run benchmark harness
+        run: bash scripts/benchmark.sh 100000

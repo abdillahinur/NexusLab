@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+/build/
+/results/
+/CMakeUserPresets.json
+/.cache/
+/.clangd/
+.idea/
+.vscode/
+*.swp
+*.swo
+compile_commands.json

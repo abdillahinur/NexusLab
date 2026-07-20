@@ -1,0 +1,44 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Feature request
+description: Propose a scoped NexusLab capability
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Engineering problem
+      description: Which comparative or explanatory question should this capability answer?
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Planned scope
+      options:
+        - MVP
+        - Version 2
+        - Version 3 or later
+        - Unclear
+    validations:
+      required: true
+  - type: input
+    id: cluster
+    attributes:
+      label: Owning cluster
+      description: Name the master-plan cluster if known.
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: How would correctness and value be measured?
+    validations:
+      required: true
+  - type: textarea
+    id: tradeoffs
+    attributes:
+      label: Scope and tradeoffs
+      description: Identify non-goals, alternatives, dependencies, and likely architecture impact.

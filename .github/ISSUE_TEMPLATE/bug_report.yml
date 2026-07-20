@@ -1,0 +1,42 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+name: Bug report
+description: Report reproducible incorrect NexusLab behavior
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: input
+    id: cluster
+    attributes:
+      label: Cluster
+      description: Which implementation cluster owns the affected behavior?
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the command, scenario, seed, build mode, and smallest reproducible steps.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include NexusLab version, commit, compiler, CMake version, and operating system.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Add logs, sanitizer output, result hashes, or screenshots without secrets.
