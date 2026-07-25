@@ -7,7 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the approved architectural direction at Cluster 0. Subsystem details will be added only as their implementation clusters reach review. The [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
+This document describes the approved architectural direction through Cluster 1. Subsystem details
+will be added only as their implementation clusters reach review. The
+[master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
 ## System boundary
 
@@ -65,6 +67,11 @@ The initial queue is `std::priority_queue` backed by `std::vector`. Cancellation
 The deterministic RNG uses raw `std::mt19937_64` output with project-owned bounded-integer sampling. Trace hashes use explicit field encodings and never depend on addresses, padding, `std::hash`, or variant indexes. Full durable snapshots and replay remain deferred to Cluster 12.
 
 See [ADR-004](docs/adr/ADR-004-deterministic-event-semantics.md) for the complete event, lifecycle, cancellation, tracing, and validation semantics.
+
+Architecture Gate 1 accepted the initial queue and lazy-cancellation strategy based on the measured
+[Cluster 1 performance baseline](docs/benchmarks/cluster-1-baseline.md). The gate defines local
+one-million-event regression guardrails and preserves ten-million-event measurement for material
+changes to the event envelope, queue, or pending-event tracking.
 
 ## Policy boundaries
 

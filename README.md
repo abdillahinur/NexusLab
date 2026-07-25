@@ -8,7 +8,9 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab has completed Cluster 0 (Project Foundation). Cluster 1 (Deterministic Simulation Core) is in progress, so it does not yet simulate training clusters and no performance or realism claims are made at this stage.
+> NexusLab has completed Cluster 0 (Project Foundation) and Cluster 1 (Deterministic Simulation
+> Core). Cluster 2 (Topology and Cluster Model) has not started, so NexusLab does not yet simulate
+> training clusters and no performance or realism claims are made at this stage.
 
 ## Current foundation
 
@@ -83,8 +85,8 @@ bash scripts/benchmark.sh 1000000
 ```
 
 The benchmark disables tracing and reports insertion and dispatch throughput, event size, current
-resident memory, and peak resident memory. Cluster 1 baseline results are recorded before regression
-thresholds are defined.
+resident memory, and peak resident memory. Cluster 1 baseline results and the post-baseline local
+regression guardrails are recorded in the architecture documentation.
 
 ## Architecture and roadmap
 
@@ -93,6 +95,7 @@ thresholds are defined.
 - [Roadmap](ROADMAP.md)
 - [Architecture decisions](docs/adr/)
 - [Cluster 1 performance baseline](docs/benchmarks/cluster-1-baseline.md)
+- [Cluster 1 architecture gate](docs/architecture-gates/cluster-1.md)
 - [Contributing](CONTRIBUTING.md)
 
 The project advances one implementation cluster at a time. Each cluster must pass its architecture gate before work begins on the next cluster.
