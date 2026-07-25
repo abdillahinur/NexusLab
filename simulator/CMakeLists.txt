@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2026 NexusLab contributors
 # SPDX-License-Identifier: Apache-2.0
 
-add_library(nexuslab_core STATIC src/version.cpp)
+add_library(
+    nexuslab_core STATIC
+    src/sim/deterministic_rng.cpp
+    src/version.cpp
+)
 add_library(NexusLab::core ALIAS nexuslab_core)
 
 target_include_directories(
@@ -20,6 +24,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     add_executable(
         nexuslab_tests
         tests/foundation_test.cpp
+        tests/simulation_primitives_test.cpp
         tests/version_test.cpp
     )
     target_link_libraries(
