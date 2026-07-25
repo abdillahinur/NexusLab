@@ -28,3 +28,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Cluster 1 architecture gate approval with initial post-baseline local regression guardrails.
 - Cluster 2 topology identity, directionality, Clos generation, validation, and serialization
   architecture.
+- Strong topology IDs and foundational GPU, NIC, switch, rack, port, and directed-link value types.
