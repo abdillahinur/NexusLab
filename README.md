@@ -92,6 +92,7 @@ thresholds are defined.
 - [Architecture](ARCHITECTURE.md)
 - [Roadmap](ROADMAP.md)
 - [Architecture decisions](docs/adr/)
+- [Cluster 1 performance baseline](docs/benchmarks/cluster-1-baseline.md)
 - [Contributing](CONTRIBUTING.md)
 
 The project advances one implementation cluster at a time. Each cluster must pass its architecture gate before work begins on the next cluster.

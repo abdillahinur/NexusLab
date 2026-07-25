@@ -24,3 +24,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   64-bit FNV-1a digest.
 - Trace-disabled simulation benchmark reporting insertion and dispatch throughput, event size, and
   resident memory.
+- Initial one-million and ten-million-event simulation-core performance and memory baseline.
