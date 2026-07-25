@@ -40,7 +40,8 @@ TEST(SimulationTest, EmptyQueueCompletesAtTimeZero) {
     const SimulationResult result = simulation.run(dispatcher);
 
     EXPECT_EQ(result, (SimulationResult{SimulationStatus::Completed, std::nullopt, SimTimeNs{0}, 0,
-                                        0, 0, 0, std::nullopt}));
+                                        0, 0, 0, result.trace_hash, std::nullopt}));
+    EXPECT_TRUE(result.trace_hash.has_value());
 }
 
 TEST(SimulationTest, DispatchesInQueueOrderAndAdvancesClock) {
@@ -124,7 +125,8 @@ TEST(SimulationTest, CancelsPendingEventsBeforeRun) {
               (std::tuple{true, false, false}));
     EXPECT_EQ(ids, (std::vector<EventId>{dispatched}));
     EXPECT_EQ(result, (SimulationResult{SimulationStatus::Completed, std::nullopt, SimTimeNs{100},
-                                        1, 1, 0, 0, std::nullopt}));
+                                        1, 1, 0, 0, result.trace_hash, std::nullopt}));
+    EXPECT_TRUE(result.trace_hash.has_value());
 }
 
 TEST(SimulationTest, EventCanCancelAnotherPendingEvent) {

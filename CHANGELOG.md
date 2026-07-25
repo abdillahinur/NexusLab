@@ -20,3 +20,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Typed value events with deterministic timestamp, priority, and event-ID queue ordering.
 - Single-use simulation lifecycle with scheduling, typed dispatch, causality, cancellation, stop, and
   failure results.
+- Typed simulation traces with explicit stable encoding, optional collection, and a deterministic
+  64-bit FNV-1a digest.
