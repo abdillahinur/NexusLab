@@ -4,10 +4,6 @@
 #include "nexuslab/sim/event.hpp"
 #include "nexuslab/sim/simulation.hpp"
 
-#include <sys/resource.h>
-#include <unistd.h>
-
-#include <cerrno>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
@@ -17,9 +13,10 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
+#include <string>
 #include <string_view>
-#include <system_error>
 
 namespace {
 
@@ -35,8 +32,6 @@ using nexuslab::sim::SimulationStatus;
 using nexuslab::sim::TraceMode;
 
 constexpr std::uint64_t default_event_count = 1'000'000;
-constexpr std::uint64_t kibibyte = 1'024;
-
 struct BenchmarkResult final {
     std::uint64_t event_count;
     std::uint64_t insertion_elapsed_ns;
@@ -61,32 +56,26 @@ struct BenchmarkResult final {
     return elapsed > 0 ? static_cast<std::uint64_t>(elapsed) : 1U;
 }
 
-[[nodiscard]] std::uint64_t current_rss_kib() {
-    std::ifstream statm{"/proc/self/statm"};
-    std::uint64_t total_pages = 0;
-    std::uint64_t resident_pages = 0;
-    if (!(statm >> total_pages >> resident_pages)) {
-        throw std::runtime_error{"failed to read current RSS from /proc/self/statm"};
+[[nodiscard]] std::uint64_t proc_status_kib(std::string_view field) {
+    std::ifstream status{"/proc/self/status"};
+    std::string label;
+    while (status >> label) {
+        if (label == field) {
+            std::uint64_t value = 0;
+            std::string unit;
+            if (!(status >> value >> unit) || unit != "kB") {
+                throw std::runtime_error{"invalid memory field in /proc/self/status"};
+            }
+            return value;
+        }
+        status.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
     }
-
-    const long page_size = ::sysconf(_SC_PAGESIZE);
-    if (page_size <= 0) {
-        throw std::system_error{errno, std::generic_category(), "sysconf(_SC_PAGESIZE) failed"};
-    }
-    const auto page_size_bytes = static_cast<std::uint64_t>(page_size);
-    return (resident_pages * page_size_bytes) / kibibyte;
+    throw std::runtime_error{"missing memory field in /proc/self/status"};
 }
 
-[[nodiscard]] std::uint64_t peak_rss_kib() {
-    rusage usage{};
-    if (::getrusage(RUSAGE_SELF, &usage) != 0) {
-        throw std::system_error{errno, std::generic_category(), "getrusage failed"};
-    }
-    if (usage.ru_maxrss < 0) {
-        throw std::runtime_error{"getrusage returned a negative peak RSS"};
-    }
-    return static_cast<std::uint64_t>(usage.ru_maxrss);
-}
+[[nodiscard]] std::uint64_t current_rss_kib() { return proc_status_kib("VmRSS:"); }
+
+[[nodiscard]] std::uint64_t peak_rss_kib() { return proc_status_kib("VmHWM:"); }
 
 [[nodiscard]] BenchmarkResult benchmark(std::uint64_t event_count) {
     Simulation simulation{42, TraceMode::Disabled};
@@ -140,6 +129,7 @@ void print_result(const BenchmarkResult& result) {
     std::cout << "benchmark=simulation_core\n"
               << "events=" << result.event_count << '\n'
               << "trace_mode=disabled\n"
+              << "memory_source=/proc/self/status\n"
               << "event_size_bytes=" << sizeof(nexuslab::sim::Event) << '\n'
               << "event_payload_size_bytes=" << sizeof(EventPayload) << '\n'
               << "insertion_elapsed_ns=" << result.insertion_elapsed_ns << '\n'
