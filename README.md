@@ -76,13 +76,15 @@ bash scripts/format.sh --check
 bash scripts/lint.sh
 ```
 
-Benchmark-harness smoke test:
+Simulation-core benchmark:
 
 ```bash
 bash scripts/benchmark.sh 1000000
 ```
 
-This benchmark validates the benchmark executable and reporting path only. Simulation performance baselines begin in Cluster 1.
+The benchmark disables tracing and reports insertion and dispatch throughput, event size, current
+resident memory, and peak resident memory. Cluster 1 baseline results are recorded before regression
+thresholds are defined.
 
 ## Architecture and roadmap
 

@@ -53,7 +53,15 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
 endif()
 
 if(NEXUSLAB_BUILD_BENCHMARKS)
-    add_executable(nexuslab_benchmarks benchmarks/foundation_benchmark.cpp)
+    add_executable(nexuslab_benchmarks benchmarks/simulation_benchmark.cpp)
     target_link_libraries(nexuslab_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
     nexuslab_enable_clang_tidy(nexuslab_benchmarks)
+
+    if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
+        add_test(NAME nexuslab_benchmark_smoke COMMAND nexuslab_benchmarks --events 1000)
+        set_tests_properties(
+            nexuslab_benchmark_smoke
+            PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=simulation_core"
+        )
+    endif()
 endif()

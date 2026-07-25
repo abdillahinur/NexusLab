@@ -22,3 +22,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   failure results.
 - Typed simulation traces with explicit stable encoding, optional collection, and a deterministic
   64-bit FNV-1a digest.
+- Trace-disabled simulation benchmark reporting insertion and dispatch throughput, event size, and
+  resident memory.
