@@ -5,8 +5,13 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <optional>
+#include <queue>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace nexuslab::topology {
 namespace {
@@ -22,6 +27,52 @@ template <typename Entity, typename Id>
     }
     return &entities[index];
 }
+
+template <typename Entity, typename Id>
+[[nodiscard]] Entity* find_dense(std::vector<Entity>& entities, Id id) noexcept {
+    if (id.value() > std::numeric_limits<std::size_t>::max()) {
+        return nullptr;
+    }
+    const auto index = static_cast<std::size_t>(id.value());
+    if (index >= entities.size() || entities[index].id != id) {
+        return nullptr;
+    }
+    return &entities[index];
+}
+
+class VisitedNodes final {
+  public:
+    explicit VisitedNodes(const TopologyGraph& graph)
+        : gpus_(graph.gpus().size()), nics_(graph.nics().size()),
+          switches_(graph.switches().size()) {}
+
+    [[nodiscard]] bool mark(NodeId node) {
+        auto& visited = visited_for(node);
+        const auto index = static_cast<std::size_t>(node.value());
+        if (visited[index] != 0U) {
+            return false;
+        }
+        visited[index] = 1U;
+        return true;
+    }
+
+  private:
+    [[nodiscard]] std::vector<std::uint8_t>& visited_for(NodeId node) {
+        switch (node.kind()) {
+        case NodeKind::Gpu:
+            return gpus_;
+        case NodeKind::Nic:
+            return nics_;
+        case NodeKind::Switch:
+            return switches_;
+        }
+        throw std::logic_error{"unknown topology node kind"};
+    }
+
+    std::vector<std::uint8_t> gpus_;
+    std::vector<std::uint8_t> nics_;
+    std::vector<std::uint8_t> switches_;
+};
 
 } // namespace
 
@@ -121,6 +172,33 @@ LinkId TopologyGraph::connect_fabric(NodeId endpoint_a, PortRole role_a, NodeId 
     return link_id;
 }
 
+bool TopologyGraph::set_link_state(LinkId id, OperationalState state) noexcept {
+    PhysicalLink* link = find_dense(links_, id);
+    if (link == nullptr) {
+        return false;
+    }
+    link->state = state;
+    return true;
+}
+
+bool TopologyGraph::set_port_state(PortId id, OperationalState state) noexcept {
+    Port* port = find_dense(ports_, id);
+    if (port == nullptr) {
+        return false;
+    }
+    port->state = state;
+    return true;
+}
+
+bool TopologyGraph::set_switch_state(SwitchId id, OperationalState state) noexcept {
+    Switch* switch_entity = find_dense(switches_, id);
+    if (switch_entity == nullptr) {
+        return false;
+    }
+    switch_entity->state = state;
+    return true;
+}
+
 const GpuWorker* TopologyGraph::find(GpuId id) const noexcept { return find_dense(gpus_, id); }
 
 const Nic* TopologyGraph::find(NicId id) const noexcept { return find_dense(nics_, id); }
@@ -147,6 +225,58 @@ std::span<const PhysicalLink> TopologyGraph::links() const noexcept { return lin
 
 std::span<const DirectedLink> TopologyGraph::outgoing(NodeId node) const { return adjacency(node); }
 
+bool TopologyGraph::is_operational(const DirectedLink& directed_link) const noexcept {
+    const PhysicalLink* link = find(directed_link.id.link);
+    const Port* source = find(directed_link.source);
+    const Port* destination = find(directed_link.destination);
+    if (link == nullptr || source == nullptr || destination == nullptr) {
+        return false;
+    }
+    const auto directions = directed_links(*link);
+    const bool matches_physical_link =
+        std::ranges::find(directions, directed_link) != directions.end();
+    return matches_physical_link && link->state == OperationalState::Up &&
+           source->state == OperationalState::Up && destination->state == OperationalState::Up &&
+           node_is_operational(source->owner) && node_is_operational(destination->owner);
+}
+
+std::optional<std::size_t> TopologyGraph::shortest_hops(NodeId source, NodeId destination) const {
+    if (!contains(source) || !contains(destination)) {
+        throw std::invalid_argument{"cannot find a path involving an unknown topology node"};
+    }
+    if (!node_is_operational(source) || !node_is_operational(destination)) {
+        return std::nullopt;
+    }
+
+    VisitedNodes visited{*this};
+    std::queue<std::pair<NodeId, std::size_t>> pending;
+    static_cast<void>(visited.mark(source));
+    pending.emplace(source, 0U);
+
+    while (!pending.empty()) {
+        const auto [node, hops] = pending.front();
+        pending.pop();
+        if (node == destination) {
+            return hops;
+        }
+
+        for (const DirectedLink& directed_link : outgoing(node)) {
+            if (!is_operational(directed_link)) {
+                continue;
+            }
+            const Port* destination_port = find(directed_link.destination);
+            if (destination_port != nullptr && visited.mark(destination_port->owner)) {
+                pending.emplace(destination_port->owner, hops + 1U);
+            }
+        }
+    }
+    return std::nullopt;
+}
+
+bool TopologyGraph::reachable(NodeId source, NodeId destination) const {
+    return shortest_hops(source, destination).has_value();
+}
+
 bool TopologyGraph::contains(NodeId node) const noexcept {
     switch (node.kind()) {
     case NodeKind::Gpu:
@@ -157,6 +287,17 @@ bool TopologyGraph::contains(NodeId node) const noexcept {
         return find(SwitchId{node.value()}) != nullptr;
     }
     return false;
+}
+
+bool TopologyGraph::node_is_operational(NodeId node) const noexcept {
+    if (!contains(node)) {
+        return false;
+    }
+    if (node.kind() != NodeKind::Switch) {
+        return true;
+    }
+    const Switch* switch_entity = find(SwitchId{node.value()});
+    return switch_entity != nullptr && switch_entity->state == OperationalState::Up;
 }
 
 bool TopologyGraph::directly_connected(NodeId endpoint_a, NodeId endpoint_b) const {

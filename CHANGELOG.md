@@ -31,3 +31,6 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Strong topology IDs and foundational GPU, NIC, switch, rack, port, and directed-link value types.
 - Validated topology construction with dense lookup, automatic local attachments, fabric links, and
   deterministic directed adjacency.
+- Operational link, port, and switch failures with recovery-safe shortest-hop reachability.
+- Structured whole-topology validation for identity, ownership, relationships, links, adjacency,
+  and connectivity.

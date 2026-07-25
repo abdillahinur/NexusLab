@@ -6,6 +6,8 @@
 #include "nexuslab/topology/entities.hpp"
 #include "nexuslab/topology/id.hpp"
 
+#include <cstddef>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -21,6 +23,10 @@ class TopologyGraph final {
     [[nodiscard]] LinkId connect_fabric(NodeId endpoint_a, PortRole role_a, NodeId endpoint_b,
                                         PortRole role_b);
 
+    [[nodiscard]] bool set_link_state(LinkId id, OperationalState state) noexcept;
+    [[nodiscard]] bool set_port_state(PortId id, OperationalState state) noexcept;
+    [[nodiscard]] bool set_switch_state(SwitchId id, OperationalState state) noexcept;
+
     [[nodiscard]] const GpuWorker* find(GpuId id) const noexcept;
     [[nodiscard]] const Nic* find(NicId id) const noexcept;
     [[nodiscard]] const Switch* find(SwitchId id) const noexcept;
@@ -35,9 +41,13 @@ class TopologyGraph final {
     [[nodiscard]] std::span<const Port> ports() const noexcept;
     [[nodiscard]] std::span<const PhysicalLink> links() const noexcept;
     [[nodiscard]] std::span<const DirectedLink> outgoing(NodeId node) const;
+    [[nodiscard]] bool is_operational(const DirectedLink& link) const noexcept;
+    [[nodiscard]] std::optional<std::size_t> shortest_hops(NodeId source, NodeId destination) const;
+    [[nodiscard]] bool reachable(NodeId source, NodeId destination) const;
 
   private:
     [[nodiscard]] bool contains(NodeId node) const noexcept;
+    [[nodiscard]] bool node_is_operational(NodeId node) const noexcept;
     [[nodiscard]] bool directly_connected(NodeId endpoint_a, NodeId endpoint_b) const;
     [[nodiscard]] std::vector<DirectedLink>& mutable_adjacency(NodeId node);
     [[nodiscard]] const std::vector<DirectedLink>& adjacency(NodeId node) const;
