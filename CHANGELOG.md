@@ -34,3 +34,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Operational link, port, and switch failures with recovery-safe shortest-hop reachability.
 - Structured whole-topology validation for identity, ownership, relationships, links, adjacency,
   and connectivity.
+- Deterministic two-tier Clos generation for the approved 512-GPU initial and 2,048-GPU stretch
+  profiles, including equal-cost shortest-path counts.

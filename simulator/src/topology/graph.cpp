@@ -40,24 +40,27 @@ template <typename Entity, typename Id>
     return &entities[index];
 }
 
-class VisitedNodes final {
+struct PathMetrics final {
+    std::size_t hops{std::numeric_limits<std::size_t>::max()};
+    std::uint64_t path_count{0};
+};
+
+class ShortestPathState final {
   public:
-    explicit VisitedNodes(const TopologyGraph& graph)
+    explicit ShortestPathState(const TopologyGraph& graph)
         : gpus_(graph.gpus().size()), nics_(graph.nics().size()),
           switches_(graph.switches().size()) {}
 
-    [[nodiscard]] bool mark(NodeId node) {
-        auto& visited = visited_for(node);
-        const auto index = static_cast<std::size_t>(node.value());
-        if (visited[index] != 0U) {
-            return false;
-        }
-        visited[index] = 1U;
-        return true;
+    [[nodiscard]] PathMetrics& metrics(NodeId node) {
+        return metrics_for(node)[static_cast<std::size_t>(node.value())];
+    }
+
+    [[nodiscard]] const PathMetrics& metrics(NodeId node) const {
+        return metrics_for(node)[static_cast<std::size_t>(node.value())];
     }
 
   private:
-    [[nodiscard]] std::vector<std::uint8_t>& visited_for(NodeId node) {
+    [[nodiscard]] std::vector<PathMetrics>& metrics_for(NodeId node) {
         switch (node.kind()) {
         case NodeKind::Gpu:
             return gpus_;
@@ -69,9 +72,21 @@ class VisitedNodes final {
         throw std::logic_error{"unknown topology node kind"};
     }
 
-    std::vector<std::uint8_t> gpus_;
-    std::vector<std::uint8_t> nics_;
-    std::vector<std::uint8_t> switches_;
+    [[nodiscard]] const std::vector<PathMetrics>& metrics_for(NodeId node) const {
+        switch (node.kind()) {
+        case NodeKind::Gpu:
+            return gpus_;
+        case NodeKind::Nic:
+            return nics_;
+        case NodeKind::Switch:
+            return switches_;
+        }
+        throw std::logic_error{"unknown topology node kind"};
+    }
+
+    std::vector<PathMetrics> gpus_;
+    std::vector<PathMetrics> nics_;
+    std::vector<PathMetrics> switches_;
 };
 
 } // namespace
@@ -240,7 +255,14 @@ bool TopologyGraph::is_operational(const DirectedLink& directed_link) const noex
            node_is_operational(source->owner) && node_is_operational(destination->owner);
 }
 
-std::optional<std::size_t> TopologyGraph::shortest_hops(NodeId source, NodeId destination) const {
+std::optional<ShortestPathSummary> TopologyGraph::shortest_path_summary(NodeId source,
+                                                                        NodeId destination) const {
+    return shortest_path_summary_impl(source, destination, true);
+}
+
+std::optional<ShortestPathSummary>
+TopologyGraph::shortest_path_summary_impl(NodeId source, NodeId destination,
+                                          bool count_equal_paths) const {
     if (!contains(source) || !contains(destination)) {
         throw std::invalid_argument{"cannot find a path involving an unknown topology node"};
     }
@@ -248,29 +270,52 @@ std::optional<std::size_t> TopologyGraph::shortest_hops(NodeId source, NodeId de
         return std::nullopt;
     }
 
-    VisitedNodes visited{*this};
-    std::queue<std::pair<NodeId, std::size_t>> pending;
-    static_cast<void>(visited.mark(source));
-    pending.emplace(source, 0U);
+    ShortestPathState state{*this};
+    std::queue<NodeId> pending;
+    state.metrics(source) = PathMetrics{0U, 1U};
+    pending.push(source);
 
     while (!pending.empty()) {
-        const auto [node, hops] = pending.front();
+        const NodeId node = pending.front();
         pending.pop();
-        if (node == destination) {
-            return hops;
-        }
+        const PathMetrics current = state.metrics(node);
 
         for (const DirectedLink& directed_link : outgoing(node)) {
             if (!is_operational(directed_link)) {
                 continue;
             }
             const Port* destination_port = find(directed_link.destination);
-            if (destination_port != nullptr && visited.mark(destination_port->owner)) {
-                pending.emplace(destination_port->owner, hops + 1U);
+            if (destination_port == nullptr) {
+                continue;
+            }
+            PathMetrics& next = state.metrics(destination_port->owner);
+            const std::size_t next_hops = current.hops + 1U;
+            if (next.hops == std::numeric_limits<std::size_t>::max()) {
+                next = PathMetrics{next_hops, current.path_count};
+                pending.push(destination_port->owner);
+            } else if (count_equal_paths && next.hops == next_hops) {
+                if (std::numeric_limits<std::uint64_t>::max() - next.path_count <
+                    current.path_count) {
+                    throw std::overflow_error{"equal-cost shortest-path count overflow"};
+                }
+                next.path_count += current.path_count;
             }
         }
     }
-    return std::nullopt;
+
+    const PathMetrics result = state.metrics(destination);
+    if (result.hops == std::numeric_limits<std::size_t>::max()) {
+        return std::nullopt;
+    }
+    return ShortestPathSummary{result.hops, result.path_count};
+}
+
+std::optional<std::size_t> TopologyGraph::shortest_hops(NodeId source, NodeId destination) const {
+    const auto summary = shortest_path_summary_impl(source, destination, false);
+    if (!summary.has_value()) {
+        return std::nullopt;
+    }
+    return summary->hops;
 }
 
 bool TopologyGraph::reachable(NodeId source, NodeId destination) const {

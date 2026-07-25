@@ -7,11 +7,19 @@
 #include "nexuslab/topology/id.hpp"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <vector>
 
 namespace nexuslab::topology {
+
+struct ShortestPathSummary final {
+    std::size_t hops;
+    std::uint64_t equal_cost_paths;
+
+    bool operator==(const ShortestPathSummary&) const = default;
+};
 
 class TopologyGraph final {
   public:
@@ -42,12 +50,16 @@ class TopologyGraph final {
     [[nodiscard]] std::span<const PhysicalLink> links() const noexcept;
     [[nodiscard]] std::span<const DirectedLink> outgoing(NodeId node) const;
     [[nodiscard]] bool is_operational(const DirectedLink& link) const noexcept;
+    [[nodiscard]] std::optional<ShortestPathSummary>
+    shortest_path_summary(NodeId source, NodeId destination) const;
     [[nodiscard]] std::optional<std::size_t> shortest_hops(NodeId source, NodeId destination) const;
     [[nodiscard]] bool reachable(NodeId source, NodeId destination) const;
 
   private:
     [[nodiscard]] bool contains(NodeId node) const noexcept;
     [[nodiscard]] bool node_is_operational(NodeId node) const noexcept;
+    [[nodiscard]] std::optional<ShortestPathSummary>
+    shortest_path_summary_impl(NodeId source, NodeId destination, bool count_equal_paths) const;
     [[nodiscard]] bool directly_connected(NodeId endpoint_a, NodeId endpoint_b) const;
     [[nodiscard]] std::vector<DirectedLink>& mutable_adjacency(NodeId node);
     [[nodiscard]] const std::vector<DirectedLink>& adjacency(NodeId node) const;

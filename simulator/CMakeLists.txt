@@ -8,6 +8,7 @@ add_library(
     src/sim/event_queue.cpp
     src/sim/simulation.cpp
     src/sim/trace.cpp
+    src/topology/clos.cpp
     src/topology/entities.cpp
     src/topology/graph.cpp
     src/topology/validation.cpp
@@ -35,6 +36,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/simulation_primitives_test.cpp
         tests/simulation_test.cpp
         tests/trace_test.cpp
+        tests/topology_clos_test.cpp
         tests/topology_entities_test.cpp
         tests/topology_graph_test.cpp
         tests/topology_operational_test.cpp
