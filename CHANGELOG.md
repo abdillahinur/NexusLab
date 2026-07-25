@@ -26,3 +26,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   resident memory.
 - Initial one-million and ten-million-event simulation-core performance and memory baseline.
 - Cluster 1 architecture gate approval with initial post-baseline local regression guardrails.
+- Cluster 2 topology identity, directionality, Clos generation, validation, and serialization
+  architecture.

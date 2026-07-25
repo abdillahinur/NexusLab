@@ -73,6 +73,25 @@ Architecture Gate 1 accepted the initial queue and lazy-cancellation strategy ba
 one-million-event regression guardrails and preserves ten-million-event measurement for material
 changes to the event envelope, queue, or pending-event tracking.
 
+## Cluster 2 topology design
+
+Cluster 2 uses distinct strong IDs and dense per-kind storage for GPUs, NICs, switches, racks, ports,
+and physical links. Explicit ports make ownership and occupancy testable. Each full-duplex physical
+link produces two deterministic directed arcs, providing the boundary for Cluster 3's per-direction
+queue and service state.
+
+The graph is topology-neutral. Direct, single-rack, leaf-spine, and Clos generators build the same
+validated entity model. Failure changes explicit operational state without deleting entities or
+renumbering IDs. Logical job placement remains a separate mapping to GPU IDs.
+
+The initial deterministic two-tier Clos profile uses eight GPUs per NIC, eight NICs per leaf, and
+eight spines: 512 GPUs produce 64 NICs and eight leaf/rack domains; the 2,048-GPU stretch profile
+produces 256 NICs and 32 leaf/rack domains. Canonical topology interchange uses YAML; Graphviz DOT is
+derived for visualization, while Protobuf remains deferred to Cluster 12.
+
+See [ADR-005](docs/adr/ADR-005-topology-and-cluster-model.md) for topology identity, directionality,
+validation, operational-state, generation, and serialization decisions.
+
 ## Policy boundaries
 
 Routing, scheduling, congestion control, collective planning, and failure recovery will use stable replaceable interfaces. Policies receive bounded views or snapshots, do not mutate simulation state directly, and emit inspectable decision records.

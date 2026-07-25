@@ -2663,22 +2663,27 @@ How will this decision be tested?
 What evidence would justify revisiting it?
 ```
 
-## Initial ADR List
+## ADR Registry
+
+Accepted:
 
 - ADR-001: Use discrete-event simulation.
 - ADR-002: Use integer nanoseconds for simulated time.
 - ADR-003: Use chunk-level rather than packet-level transfers.
-- ADR-004: Begin with Clos topology.
-- ADR-005: Separate policies from simulation core.
-- ADR-006: Use YAML scenarios.
-- ADR-007: Use deterministic seeded randomness.
-- ADR-008: Separate collective planning from routing.
-- ADR-009: Store replay independently from the simulator.
-- ADR-010: Treat real-cluster support as a backend abstraction.
-- ADR-011: Use C++ for the simulation core.
-- ADR-012: Use React or Next.js for replay visualization.
-- ADR-013: Record policy decision explanations.
-- ADR-014: Optimize job completion time rather than only flow latency.
+- ADR-004: Define deterministic event semantics.
+- ADR-005: Define the topology and cluster model, beginning with Clos.
+
+Planned topics receive an ADR number when work on the owning cluster begins:
+
+- separate policies from simulation core;
+- use YAML scenarios;
+- separate collective planning from routing;
+- store replay independently from the simulator;
+- treat real-cluster support as a backend abstraction;
+- use C++ for the simulation core;
+- use React or Next.js for replay visualization;
+- record policy decision explanations;
+- optimize job completion time rather than only flow latency.
 
 ---
 
@@ -3470,7 +3475,7 @@ The value is that it demonstrates disciplined engineering across architecture, s
 |---|---|---|---|
 | 0 | Project Foundation | Complete | Yes |
 | 1 | Deterministic Simulation Core | Complete | Yes |
-| 2 | Topology and Cluster Model | Not Started | No |
+| 2 | Topology and Cluster Model | In Progress | No |
 | 3 | Link, Queue, and Transfer Model | Not Started | No |
 | 4 | Routing Policy Framework | Not Started | No |
 | 5 | Training Workload Engine | Not Started | No |
