@@ -4,6 +4,8 @@
 add_library(
     nexuslab_core STATIC
     src/sim/deterministic_rng.cpp
+    src/sim/event_id.cpp
+    src/sim/event_queue.cpp
     src/version.cpp
 )
 add_library(NexusLab::core ALIAS nexuslab_core)
@@ -23,6 +25,7 @@ nexuslab_enable_clang_tidy(nexuslab)
 if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     add_executable(
         nexuslab_tests
+        tests/event_queue_test.cpp
         tests/foundation_test.cpp
         tests/simulation_primitives_test.cpp
         tests/version_test.cpp

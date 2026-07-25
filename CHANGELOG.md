@@ -17,3 +17,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Cluster 1 deterministic event semantics and lifecycle architecture.
 - Strong simulated-time and event identifier types with checked time arithmetic.
 - Deterministic random-number generation with stable bounded-integer sampling.
+- Typed value events with deterministic timestamp, priority, and event-ID queue ordering.

@@ -20,4 +20,19 @@ class EventId final {
     std::uint64_t value_;
 };
 
+class EventIdGenerator final {
+  public:
+    explicit EventIdGenerator(std::uint64_t next_value = 0) noexcept;
+    EventIdGenerator(const EventIdGenerator&) = delete;
+    EventIdGenerator& operator=(const EventIdGenerator&) = delete;
+    EventIdGenerator(EventIdGenerator&&) = delete;
+    EventIdGenerator& operator=(EventIdGenerator&&) = delete;
+
+    [[nodiscard]] EventId next();
+
+  private:
+    std::uint64_t next_value_;
+    bool exhausted_{false};
+};
+
 } // namespace nexuslab::sim
