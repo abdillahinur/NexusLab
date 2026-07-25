@@ -9,6 +9,7 @@ add_library(
     src/sim/simulation.cpp
     src/sim/trace.cpp
     src/topology/entities.cpp
+    src/topology/graph.cpp
     src/version.cpp
 )
 add_library(NexusLab::core ALIAS nexuslab_core)
@@ -34,6 +35,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/simulation_test.cpp
         tests/trace_test.cpp
         tests/topology_entities_test.cpp
+        tests/topology_graph_test.cpp
         tests/version_test.cpp
     )
     target_link_libraries(

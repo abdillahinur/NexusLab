@@ -29,3 +29,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Cluster 2 topology identity, directionality, Clos generation, validation, and serialization
   architecture.
 - Strong topology IDs and foundational GPU, NIC, switch, rack, port, and directed-link value types.
+- Validated topology construction with dense lookup, automatic local attachments, fabric links, and
+  deterministic directed adjacency.
