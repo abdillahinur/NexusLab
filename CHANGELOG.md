@@ -14,3 +14,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Cluster 0 repository foundation.
 - Apache License 2.0 licensing.
 - Initial architecture decisions and roadmap.
+- Cluster 1 deterministic event semantics and lifecycle architecture.

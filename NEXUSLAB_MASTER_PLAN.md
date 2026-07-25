@@ -3469,7 +3469,7 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | Cluster | Name | Status | Gate Approved |
 |---|---|---|---|
 | 0 | Project Foundation | Complete | Yes |
-| 1 | Deterministic Simulation Core | Not Started | No |
+| 1 | Deterministic Simulation Core | In Progress | No |
 | 2 | Topology and Cluster Model | Not Started | No |
 | 3 | Link, Queue, and Transfer Model | Not Started | No |
 | 4 | Routing Policy Framework | Not Started | No |

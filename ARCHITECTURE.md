@@ -56,6 +56,16 @@ scenario definition
 
 Given identical configuration, seed, build version, and policy version, a run must produce identical output unless nondeterministic execution is explicitly enabled. Event ordering, random-number generation, identifiers, policy tie-breaking, and serialization must therefore be deterministic by construction.
 
+## Cluster 1 simulation-core design
+
+Cluster 1 uses value-owned typed events with a total order of timestamp, priority, and engine-assigned event ID. The event ID also acts as the final sequence tie-breaker and trace identity. Event payloads use `std::variant` and contain stable identifiers and scalar values rather than pointers, references, or arbitrary callbacks.
+
+The initial queue is `std::priority_queue` backed by `std::vector`. Cancellation uses lazy invalidation until measurements justify an indexed or custom queue. Dispatchers receive a bounded context for scheduling, cancellation, deterministic random draws, and cooperative stop requests; they cannot mutate the clock or queue directly.
+
+The deterministic RNG uses raw `std::mt19937_64` output with project-owned bounded-integer sampling. Trace hashes use explicit field encodings and never depend on addresses, padding, `std::hash`, or variant indexes. Full durable snapshots and replay remain deferred to Cluster 12.
+
+See [ADR-004](docs/adr/ADR-004-deterministic-event-semantics.md) for the complete event, lifecycle, cancellation, tracing, and validation semantics.
+
 ## Policy boundaries
 
 Routing, scheduling, congestion control, collective planning, and failure recovery will use stable replaceable interfaces. Policies receive bounded views or snapshots, do not mutate simulation state directly, and emit inspectable decision records.
