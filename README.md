@@ -8,7 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab is in Cluster 0 (Project Foundation). It does not yet simulate training clusters, and no performance or realism claims are made at this stage.
+> NexusLab has completed Cluster 0 (Project Foundation). Cluster 1 has not started, so it does not yet simulate training clusters and no performance or realism claims are made at this stage.
 
 ## Current foundation
 

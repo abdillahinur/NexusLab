@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Architecture Gate — Cluster 0
 
-Date: 2026-07-19
+Date: 2026-07-25
 
 ## Correctness
 
@@ -59,15 +59,15 @@ Date: 2026-07-19
 - Linux clang-tidy build: passed.
 - Release benchmark smoke run: 100,000 iterations, 84,053 ns, checksum `5134964229064569837`; harness only, not a Cluster 1 performance baseline.
 - WSL-mounted source build handling: passed using the automatic Linux-native cache at `~/.cache/nexuslab-build`.
-- GitHub Actions: configured but not run because no commit was pushed.
+- GitHub Actions run [`30143432251`](https://github.com/abdillahinur/NexusLab/actions/runs/30143432251) passed for commit `ef9d9e6` on 2026-07-25 in 1 minute 54 seconds.
+- Hosted CI passed the GCC and Clang build-and-test matrix, ASan/UBSan, clang-format/clang-tidy, and benchmark-harness smoke jobs.
 
 ## Decision
 
-Proceed: **NO**
+Proceed: **YES**
 
 Required changes:
 
-- Run the configured CI workflow and record its result.
-- Update this gate to `Proceed: YES` only after the evidence above is captured.
+- None.
 
-Cluster 1 must not begin while this gate remains `Proceed: NO`.
+Cluster 0 is approved. Cluster 1 may begin under the scope and gate requirements defined in the master plan.
