@@ -18,3 +18,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Strong simulated-time and event identifier types with checked time arithmetic.
 - Deterministic random-number generation with stable bounded-integer sampling.
 - Typed value events with deterministic timestamp, priority, and event-ID queue ordering.
+- Single-use simulation lifecycle with scheduling, typed dispatch, causality, cancellation, stop, and
+  failure results.
