@@ -1,39 +1,30 @@
 // SPDX-FileCopyrightText: 2026 NexusLab contributors
 // SPDX-License-Identifier: Apache-2.0
 
-#include "nexuslab/version.hpp"
+#include "nexuslab/cli/application.hpp"
 
 #include <cstdio>
 #include <exception>
 #include <iostream>
 #include <string_view>
+#include <vector>
 
 namespace {
 
-void print_usage(std::ostream& output) { output << "Usage: nexuslab [--help | --version]\n"; }
-
-int run(int argc, char** argv) {
-    if (argc == 2) {
-        const std::string_view argument{argv[1]};
-        if (argument == "--version") {
-            std::cout << "NexusLab " << nexuslab::version() << '\n';
-            return 0;
-        }
-        if (argument == "--help" || argument == "-h") {
-            print_usage(std::cout);
-            return 0;
-        }
+[[nodiscard]] std::vector<std::string_view> arguments(int argc, char** argv) {
+    std::vector<std::string_view> result;
+    result.reserve(static_cast<std::size_t>(argc - 1));
+    for (int index = 1; index < argc; ++index) {
+        result.emplace_back(argv[index]);
     }
-
-    print_usage(std::cerr);
-    return 2;
+    return result;
 }
 
 } // namespace
 
 int main(int argc, char* argv[]) {
     try {
-        return run(argc, argv);
+        return nexuslab::cli::run(arguments(argc, argv), std::cout, std::cerr);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "nexuslab failed: %s\n", error.what());
     } catch (...) {

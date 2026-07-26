@@ -1,0 +1,39 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+schema_version: 1
+racks:
+  - id: 0
+    gpus: [0]
+    nics: [0]
+    leaf_switches: []
+gpus:
+  - id: 0
+    rack: 0
+    attached_nic: 0
+    port: 0
+nics:
+  - id: 0
+    rack: 0
+    attached_gpus: [0]
+    ports: [1]
+switches: []
+ports:
+  - id: 0
+    owner:
+      kind: gpu
+      id: 0
+    role: local
+    state: up
+  - id: 1
+    owner:
+      kind: nic
+      id: 0
+    role: local
+    state: up
+links:
+  - id: 0
+    endpoint_a: 0
+    endpoint_b: 1
+    kind: local_attachment
+    state: up

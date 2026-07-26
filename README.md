@@ -54,6 +54,8 @@ Run the CLI from a WSL-mounted checkout:
 
 ```bash
 ~/.cache/nexuslab-build/dev/simulator/nexuslab --version
+~/.cache/nexuslab-build/dev/simulator/nexuslab topology summary --clos initial
+~/.cache/nexuslab-build/dev/simulator/nexuslab topology summary --file topology.yaml
 ```
 
 On native Linux, the equivalent path is `./build/dev/simulator/nexuslab`.
@@ -63,6 +65,10 @@ Expected version output:
 ```text
 NexusLab 0.1.0
 ```
+
+The topology summary command is inspection-only. It reports stable entity, link-type, and
+operational-state counts for the approved 512-GPU initial Clos profile, the 2,048-GPU stretch
+profile, or a canonical topology YAML file.
 
 Sanitizer build:
 

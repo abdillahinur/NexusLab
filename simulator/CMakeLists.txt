@@ -13,6 +13,7 @@ add_library(
     src/topology/export.cpp
     src/topology/graph.cpp
     src/topology/import.cpp
+    src/topology/summary.cpp
     src/topology/validation.cpp
     src/version.cpp
 )
@@ -26,8 +27,12 @@ target_include_directories(
 target_link_libraries(nexuslab_core PUBLIC nexuslab_project_options PRIVATE yaml-cpp::yaml-cpp)
 nexuslab_enable_clang_tidy(nexuslab_core)
 
+add_library(nexuslab_cli_support STATIC src/cli/application.cpp)
+target_link_libraries(nexuslab_cli_support PUBLIC NexusLab::core PRIVATE nexuslab_project_options)
+nexuslab_enable_clang_tidy(nexuslab_cli_support)
+
 add_executable(nexuslab src/main.cpp)
-target_link_libraries(nexuslab PRIVATE NexusLab::core nexuslab_project_options)
+target_link_libraries(nexuslab PRIVATE nexuslab_cli_support nexuslab_project_options)
 nexuslab_enable_clang_tidy(nexuslab)
 
 if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
@@ -44,6 +49,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/topology_graph_test.cpp
         tests/topology_import_test.cpp
         tests/topology_operational_test.cpp
+        tests/topology_summary_test.cpp
         tests/topology_validation_test.cpp
         tests/version_test.cpp
     )
@@ -51,6 +57,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         nexuslab_tests
         PRIVATE
             NexusLab::core
+            nexuslab_cli_support
             GTest::gmock
             GTest::gtest_main
             yaml-cpp::yaml-cpp
@@ -63,6 +70,21 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
 
     add_test(NAME nexuslab_cli_version COMMAND nexuslab --version)
     set_tests_properties(nexuslab_cli_version PROPERTIES PASS_REGULAR_EXPRESSION "NexusLab 0.1.0")
+    add_test(NAME nexuslab_cli_initial_topology COMMAND nexuslab topology summary --clos initial)
+    set_tests_properties(
+        nexuslab_cli_initial_topology
+        PROPERTIES PASS_REGULAR_EXPRESSION "source=clos:initial[\r\n]+racks=8[\r\n]+gpus=512"
+    )
+    add_test(
+        NAME nexuslab_cli_topology_file
+        COMMAND
+            nexuslab topology summary --file
+            "${CMAKE_CURRENT_SOURCE_DIR}/tests/data/direct-topology.yaml"
+    )
+    set_tests_properties(
+        nexuslab_cli_topology_file
+        PROPERTIES PASS_REGULAR_EXPRESSION "source=file:.*direct-topology.yaml[\r\n]+racks=1[\r\n]+gpus=1"
+    )
 endif()
 
 if(NEXUSLAB_BUILD_BENCHMARKS)
