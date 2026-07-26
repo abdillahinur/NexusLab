@@ -37,3 +37,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Deterministic two-tier Clos generation for the approved 512-GPU initial and 2,048-GPU stretch
   profiles, including equal-cost shortest-path counts.
 - Versioned canonical topology YAML serialization and deterministic Graphviz DOT export.
+- Strict topology YAML loading with validated reconstruction and byte-stable canonical round trips.

@@ -12,6 +12,7 @@ add_library(
     src/topology/entities.cpp
     src/topology/export.cpp
     src/topology/graph.cpp
+    src/topology/import.cpp
     src/topology/validation.cpp
     src/version.cpp
 )
@@ -41,6 +42,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/topology_entities_test.cpp
         tests/topology_export_test.cpp
         tests/topology_graph_test.cpp
+        tests/topology_import_test.cpp
         tests/topology_operational_test.cpp
         tests/topology_validation_test.cpp
         tests/version_test.cpp
