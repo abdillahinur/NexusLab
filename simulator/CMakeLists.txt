@@ -10,6 +10,7 @@ add_library(
     src/sim/trace.cpp
     src/topology/clos.cpp
     src/topology/entities.cpp
+    src/topology/export.cpp
     src/topology/graph.cpp
     src/topology/validation.cpp
     src/version.cpp
@@ -21,7 +22,7 @@ target_include_directories(
     PUBLIC
         "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
 )
-target_link_libraries(nexuslab_core PUBLIC nexuslab_project_options)
+target_link_libraries(nexuslab_core PUBLIC nexuslab_project_options PRIVATE yaml-cpp::yaml-cpp)
 nexuslab_enable_clang_tidy(nexuslab_core)
 
 add_executable(nexuslab src/main.cpp)
@@ -38,6 +39,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/trace_test.cpp
         tests/topology_clos_test.cpp
         tests/topology_entities_test.cpp
+        tests/topology_export_test.cpp
         tests/topology_graph_test.cpp
         tests/topology_operational_test.cpp
         tests/topology_validation_test.cpp
