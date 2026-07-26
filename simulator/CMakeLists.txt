@@ -11,6 +11,7 @@ add_library(
     src/topology/clos.cpp
     src/topology/entities.cpp
     src/topology/export.cpp
+    src/topology/families.cpp
     src/topology/graph.cpp
     src/topology/import.cpp
     src/topology/summary.cpp
@@ -46,6 +47,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/topology_clos_test.cpp
         tests/topology_entities_test.cpp
         tests/topology_export_test.cpp
+        tests/topology_families_test.cpp
         tests/topology_graph_test.cpp
         tests/topology_import_test.cpp
         tests/topology_operational_test.cpp

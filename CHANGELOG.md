@@ -39,3 +39,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Versioned canonical topology YAML serialization and deterministic Graphviz DOT export.
 - Strict topology YAML loading with validated reconstruction and byte-stable canonical round trips.
 - Inspection-only topology summary CLI for approved Clos profiles and canonical YAML files.
+- Deterministic two-GPU direct, single-rack, and configurable leaf-spine topology generators.

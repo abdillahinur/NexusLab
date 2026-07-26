@@ -215,6 +215,20 @@ The same graph supports:
 Logical job ranks, collective roles, and scheduler placement are separate mappings to `GpuId` and are
 deferred to Clusters 5 through 7.
 
+### Initial topology families
+
+The direct topology contains two racks, each with one GPU and one dedicated NIC, plus one
+NIC-to-NIC fabric link and no switches. The direct GPU-to-GPU path is therefore three physical
+hops.
+
+The single-rack generator accepts a GPU count and GPUs per NIC. It requires exact divisibility,
+creates one leaf switch, and connects every NIC in the rack to that leaf.
+
+The configurable leaf-spine generator accepts leaf count, NICs per leaf, GPUs per NIC, and spine
+count. Every leaf owns one rack and connects exactly once to every spine. The Clos generator derives
+these dimensions from its GPU-count-oriented configuration and delegates construction to the same
+leaf-spine builder, preserving one canonical graph layout and ID order.
+
 ### Initial Clos profile
 
 Cluster 2 implements a deterministic two-tier leaf-spine Clos generator with:
@@ -295,6 +309,7 @@ Positive:
 - Full-duplex directionality and future queue ownership are explicit.
 - Link and switch failures preserve stable identity and adjacency.
 - Clos, direct, and future topology builders share one validated graph.
+- Clos and generic leaf-spine profiles share one canonical construction path.
 - Canonical YAML supports inspection and visualization without introducing replay serialization.
 
 Negative:
