@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the approved architectural direction through Cluster 1. Subsystem details
+This document describes the approved architectural direction through Cluster 2. Subsystem details
 will be added only as their implementation clusters reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
@@ -50,7 +50,7 @@ scenario definition
 | Anchor failure | Spine-link failure |
 | Headline metrics | Job completion time, GPU idle time, queue depth, link utilization, drops |
 | First UI release | Replay only; no live streaming or cluster control |
-| Performance thresholds | Set after the Cluster 1 local baseline |
+| Performance thresholds | Local post-baseline guardrails defined by architecture gates |
 | Portfolio-ready MVP target | 16 weeks, subordinate to architecture-gate quality |
 | License | Apache-2.0 |
 
@@ -91,6 +91,13 @@ derived for visualization, while Protobuf remains deferred to Cluster 12.
 
 See [ADR-005](docs/adr/ADR-005-topology-and-cluster-model.md) for topology identity, directionality,
 validation, operational-state, generation, and serialization decisions.
+
+Architecture Gate 2 accepted the topology model after the
+[Cluster 2 topology baseline](docs/benchmarks/cluster-2-topology-baseline.md) identified repeated
+port-occupancy scans and the measured
+[linear-time validation optimization](docs/benchmarks/cluster-2-validation-optimization.md) removed
+that scaling risk. The [gate](docs/architecture-gates/cluster-2.md) defines local 2,048-GPU
+regression guardrails and preserves 8,192-GPU measurement for material topology changes.
 
 ## Policy boundaries
 

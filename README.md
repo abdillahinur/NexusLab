@@ -8,9 +8,10 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab has completed Cluster 0 (Project Foundation) and Cluster 1 (Deterministic Simulation
-> Core). Cluster 2 (Topology and Cluster Model) is in progress, so NexusLab does not yet simulate
-> training workloads and no performance or realism claims are made at this stage.
+> NexusLab has completed Cluster 0 (Project Foundation), Cluster 1 (Deterministic Simulation Core),
+> and Cluster 2 (Topology and Cluster Model). Cluster 3 (Link, Queue, and Transfer Model) has not
+> begun, so NexusLab does not yet simulate data movement, congestion, or training workloads, and no
+> performance or realism claims are made at this stage.
 
 ## Current foundation
 
@@ -21,7 +22,12 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 - GCC and Clang CI coverage;
 - AddressSanitizer and UndefinedBehaviorSanitizer configuration;
 - formatting and static-analysis checks;
-- a lightweight benchmark-harness smoke test.
+- a deterministic event engine with typed tracing and reproducible random-number generation;
+- a validated topology-neutral graph with stable GPU, NIC, switch, rack, port, and link identity;
+- deterministic direct, single-rack, leaf-spine, and Clos topology generators;
+- operational failure state, shortest-path queries, canonical YAML, Graphviz DOT, and topology
+  summary inspection;
+- simulation-core and topology benchmark harnesses.
 
 Dependency commits are pinned in `cmake/NexusLabDependencies.cmake`.
 
@@ -112,7 +118,9 @@ validation, on-demand shortest-path query, memory, and canonical YAML serializat
 - [Cluster 1 performance baseline](docs/benchmarks/cluster-1-baseline.md)
 - [Cluster 2 topology baseline](docs/benchmarks/cluster-2-topology-baseline.md)
 - [Cluster 2 validation optimization](docs/benchmarks/cluster-2-validation-optimization.md)
+- [Cluster 0 architecture gate](docs/architecture-gates/cluster-0.md)
 - [Cluster 1 architecture gate](docs/architecture-gates/cluster-1.md)
+- [Cluster 2 architecture gate](docs/architecture-gates/cluster-2.md)
 - [Contributing](CONTRIBUTING.md)
 
 The project advances one implementation cluster at a time. Each cluster must pass its architecture gate before work begins on the next cluster.

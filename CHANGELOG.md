@@ -46,3 +46,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   scales.
 - Linear-time topology port-occupancy validation replacing repeated full-link scans.
 - Measured Cluster 2 validation optimization results, including an 87.46x speedup at 8,192 GPUs.
+- Cluster 2 architecture gate approval with initial post-baseline local regression guardrails.

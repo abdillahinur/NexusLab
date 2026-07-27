@@ -107,5 +107,6 @@ respectively.
   coverage.
 
 The measurement supports keeping the simple contiguous occupancy vector. More complex validation
-data structures are not justified. Regression thresholds remain an Architecture Gate 2 decision and
-must account for normal workstation variance rather than using the fastest individual run.
+data structures are not justified. The
+[Cluster 2 architecture gate](../architecture-gates/cluster-2.md) defines local regression
+guardrails from these medians with explicit workstation-variance margins.
