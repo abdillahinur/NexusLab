@@ -111,6 +111,7 @@ validation, on-demand shortest-path query, memory, and canonical YAML serializat
 - [Architecture decisions](docs/adr/)
 - [Cluster 1 performance baseline](docs/benchmarks/cluster-1-baseline.md)
 - [Cluster 2 topology baseline](docs/benchmarks/cluster-2-topology-baseline.md)
+- [Cluster 2 validation optimization](docs/benchmarks/cluster-2-validation-optimization.md)
 - [Cluster 1 architecture gate](docs/architecture-gates/cluster-1.md)
 - [Contributing](CONTRIBUTING.md)
 

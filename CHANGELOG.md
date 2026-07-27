@@ -45,3 +45,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Initial Cluster 2 topology performance, memory, and serialization baseline across all required
   scales.
 - Linear-time topology port-occupancy validation replacing repeated full-link scans.
+- Measured Cluster 2 validation optimization results, including an 87.46x speedup at 8,192 GPUs.
