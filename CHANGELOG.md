@@ -48,3 +48,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Measured Cluster 2 validation optimization results, including an 87.46x speedup at 8,192 GPUs.
 - Cluster 2 architecture gate approval with initial post-baseline local regression guardrails.
 - Cluster 3 deterministic link, FIFO queue, chunk transfer, timing, drop, and failure semantics.
+- Strong transfer identity, byte-count, and bandwidth types with checked integer serialization
+  delay.
