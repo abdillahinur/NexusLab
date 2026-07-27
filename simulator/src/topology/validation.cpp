@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <queue>
 #include <span>
@@ -29,6 +30,25 @@ template <typename Entity> [[nodiscard]] bool has_dense_ids(std::span<const Enti
         }
     }
     return true;
+}
+
+void count_port_endpoint(std::vector<std::uint8_t>& counts, PortId endpoint) {
+    if (endpoint.value() > std::numeric_limits<std::size_t>::max()) {
+        return;
+    }
+    const auto index = static_cast<std::size_t>(endpoint.value());
+    if (index < counts.size() && counts[index] < 2U) {
+        ++counts[index];
+    }
+}
+
+[[nodiscard]] std::vector<std::uint8_t> port_link_counts(const TopologyGraph& graph) {
+    std::vector<std::uint8_t> counts(graph.ports().size(), 0U);
+    for (const PhysicalLink& link : graph.links()) {
+        count_port_endpoint(counts, link.endpoint_a);
+        count_port_endpoint(counts, link.endpoint_b);
+    }
+    return counts;
 }
 
 [[nodiscard]] bool node_exists(const TopologyGraph& graph, NodeId node) {
@@ -90,7 +110,8 @@ class StructuralVisited final {
 
 class TopologyValidator final {
   public:
-    explicit TopologyValidator(const TopologyGraph& graph) : graph_{graph} {}
+    explicit TopologyValidator(const TopologyGraph& graph)
+        : graph_{graph}, port_link_counts_{port_link_counts(graph)} {}
 
     [[nodiscard]] ValidationReport validate() {
         validate_identity();
@@ -258,11 +279,10 @@ class TopologyValidator final {
                 add(ValidationErrorCode::PortOwnershipMismatch,
                     "port owner does not reference the port exactly once", port.owner);
             }
-            const auto link_count = static_cast<std::size_t>(
-                std::ranges::count_if(graph_.links(), [&](const PhysicalLink& link) {
-                    return link.endpoint_a == port.id || link.endpoint_b == port.id;
-                }));
-            if (link_count != 1U) {
+            const bool id_fits_index = port.id.value() <= std::numeric_limits<std::size_t>::max();
+            const auto index = id_fits_index ? static_cast<std::size_t>(port.id.value())
+                                             : port_link_counts_.size();
+            if (index >= port_link_counts_.size() || port_link_counts_[index] != 1U) {
                 add(ValidationErrorCode::PortLinkCountMismatch,
                     "every port must terminate exactly one physical link", port.owner);
             }
@@ -384,6 +404,7 @@ class TopologyValidator final {
     }
 
     const TopologyGraph& graph_;
+    std::vector<std::uint8_t> port_link_counts_;
     ValidationReport report_;
 };
 

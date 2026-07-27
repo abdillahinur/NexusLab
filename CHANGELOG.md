@@ -44,3 +44,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   benchmark harness.
 - Initial Cluster 2 topology performance, memory, and serialization baseline across all required
   scales.
+- Linear-time topology port-occupancy validation replacing repeated full-link scans.

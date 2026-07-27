@@ -85,5 +85,33 @@ TEST(TopologyValidationTest, ReportsDisconnectedNodesWithStructuredContext) {
         }));
 }
 
+TEST(TopologyValidationTest, ReportsUnlinkedAndMultiplyLinkedPorts) {
+    TopologyGraph graph;
+    static_cast<void>(populate_valid_topology(graph));
+    ASSERT_EQ(graph.links().size(), 3U);
+    const PortId shared_endpoint = graph.links()[1].endpoint_a;
+    auto& corrupted_link = const_cast<PhysicalLink&>(graph.links()[2]);
+    corrupted_link.endpoint_a = shared_endpoint;
+
+    const ValidationReport report = validate_topology(graph);
+
+    EXPECT_FALSE(report.valid());
+    EXPECT_TRUE(has_error(report, ValidationErrorCode::PortLinkCountMismatch));
+}
+
+TEST(TopologyValidationTest, ReportsUnknownLinkEndpointWithoutIndexingPastPorts) {
+    TopologyGraph graph;
+    static_cast<void>(populate_valid_topology(graph));
+    ASSERT_FALSE(graph.links().empty());
+    auto& corrupted_link = const_cast<PhysicalLink&>(graph.links().back());
+    corrupted_link.endpoint_a = PortId{999U};
+
+    const ValidationReport report = validate_topology(graph);
+
+    EXPECT_FALSE(report.valid());
+    EXPECT_TRUE(has_error(report, ValidationErrorCode::UnknownReference));
+    EXPECT_TRUE(has_error(report, ValidationErrorCode::PortLinkCountMismatch));
+}
+
 } // namespace
 } // namespace nexuslab::topology
