@@ -83,7 +83,42 @@ TEST(ClosTopologyTest, GeneratesAndValidatesInitialAndStretchTargets) {
         ASSERT_NE(graph, nullptr);
         expect_graph_counts(*graph, dimensions);
         EXPECT_TRUE(validate_topology(*graph).valid());
+        EXPECT_TRUE(validate_clos_topology(*graph, config).valid());
     }
+}
+
+TEST(ClosTopologyTest, GeneratesAndValidatesRequiredScaleMatrix) {
+    constexpr std::array gpu_counts{64U, 512U, 2'048U, 8'192U};
+
+    for (std::size_t gpu_count : gpu_counts) {
+        const ClosConfig config{gpu_count, 8U, 8U, 8U};
+        const std::unique_ptr<TopologyGraph> graph = generate_clos(config);
+        ASSERT_NE(graph, nullptr);
+        EXPECT_TRUE(validate_clos_topology(*graph, config).valid());
+        EXPECT_EQ(graph->gpus().size(), gpu_count);
+    }
+}
+
+TEST(ClosTopologyTest, ClosValidationRejectsAnotherValidTopologyShape) {
+    const ClosConfig generated_config{64U, 8U, 8U, 8U};
+    const std::unique_ptr<TopologyGraph> graph = generate_clos(generated_config);
+    ASSERT_NE(graph, nullptr);
+
+    const ValidationReport report = validate_clos_topology(*graph, ClosConfig{64U, 4U, 8U, 8U});
+
+    ASSERT_FALSE(report.valid());
+    EXPECT_TRUE(std::ranges::any_of(report.errors, [](const ValidationError& error) {
+        return error.code == ValidationErrorCode::TopologyShapeMismatch;
+    }));
+}
+
+TEST(ClosTopologyTest, ClosValidationIgnoresOperationalFailureState) {
+    const ClosConfig config{64U, 8U, 8U, 8U};
+    const std::unique_ptr<TopologyGraph> graph = generate_clos(config);
+    ASSERT_NE(graph, nullptr);
+    ASSERT_TRUE(graph->set_link_state(LinkId{72U}, OperationalState::Down));
+
+    EXPECT_TRUE(validate_clos_topology(*graph, config).valid());
 }
 
 TEST(ClosTopologyTest, AssignsCanonicalRackLeafNicAndGpuMembership) {

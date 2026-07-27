@@ -40,3 +40,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Strict topology YAML loading with validated reconstruction and byte-stable canonical round trips.
 - Inspection-only topology summary CLI for approved Clos profiles and canonical YAML files.
 - Deterministic two-GPU direct, single-rack, and configurable leaf-spine topology generators.
+- Clos-specific structural validation, required-scale coverage through 8,192 GPUs, and a topology
+  benchmark harness.

@@ -13,6 +13,8 @@
 
 namespace nexuslab::topology {
 
+struct ClosConfig;
+
 enum class ValidationErrorCode : std::uint8_t {
     EmptyTopology = 1,
     NonDenseId = 2,
@@ -24,6 +26,7 @@ enum class ValidationErrorCode : std::uint8_t {
     LinkKindMismatch = 8,
     AdjacencyMismatch = 9,
     DisconnectedNode = 10,
+    TopologyShapeMismatch = 11,
 };
 
 struct ValidationError final {
@@ -42,5 +45,7 @@ struct ValidationReport final {
 };
 
 [[nodiscard]] ValidationReport validate_topology(const TopologyGraph& graph);
+[[nodiscard]] ValidationReport validate_clos_topology(const TopologyGraph& graph,
+                                                      const ClosConfig& config);
 
 } // namespace nexuslab::topology

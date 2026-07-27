@@ -3,6 +3,8 @@
 
 #include "nexuslab/topology/validation.hpp"
 
+#include "nexuslab/topology/clos.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -385,12 +387,93 @@ class TopologyValidator final {
     ValidationReport report_;
 };
 
+struct Connection final {
+    NodeId source;
+    NodeId destination;
+};
+
+[[nodiscard]] bool directly_connected(const TopologyGraph& graph, const Connection& connection) {
+    return std::ranges::any_of(graph.outgoing(connection.source), [&](const DirectedLink& link) {
+        const Port* destination_port = graph.find(link.destination);
+        return destination_port != nullptr && destination_port->owner == connection.destination;
+    });
+}
+
+[[nodiscard]] bool rack_matches_clos(const TopologyGraph& graph, const Rack& rack,
+                                     const ClosConfig& config, std::span<const SwitchId> spines) {
+    const std::size_t expected_gpu_count = config.nics_per_leaf * config.gpus_per_nic;
+    if (rack.leaf_switches.size() != 1U || rack.nics.size() != config.nics_per_leaf ||
+        rack.gpus.size() != expected_gpu_count) {
+        return false;
+    }
+
+    const SwitchId leaf_id = rack.leaf_switches.front();
+    const Switch* leaf = graph.find(leaf_id);
+    if (leaf == nullptr || leaf->ports.size() != config.nics_per_leaf + config.spine_count) {
+        return false;
+    }
+    for (NicId nic_id : rack.nics) {
+        const Nic* nic = graph.find(nic_id);
+        if (nic == nullptr || nic->attached_gpus.size() != config.gpus_per_nic ||
+            !directly_connected(graph, Connection{NodeId{nic_id}, NodeId{leaf_id}})) {
+            return false;
+        }
+    }
+    return std::ranges::all_of(spines, [&](SwitchId spine_id) {
+        return directly_connected(graph, Connection{NodeId{leaf_id}, NodeId{spine_id}});
+    });
+}
+
+[[nodiscard]] bool matches_clos_shape(const TopologyGraph& graph, const ClosConfig& config,
+                                      const ClosDimensions& expected) {
+    if (graph.gpus().size() != expected.gpu_count || graph.nics().size() != expected.nic_count ||
+        graph.racks().size() != expected.rack_count ||
+        graph.switches().size() != expected.switch_count ||
+        graph.ports().size() != expected.port_count ||
+        graph.links().size() != expected.link_count) {
+        return false;
+    }
+
+    std::vector<SwitchId> leaves;
+    std::vector<SwitchId> spines;
+    for (const Switch& switch_entity : graph.switches()) {
+        (switch_entity.role == SwitchRole::Leaf ? leaves : spines).push_back(switch_entity.id);
+    }
+    if (leaves.size() != expected.leaf_count || spines.size() != expected.spine_count) {
+        return false;
+    }
+    if (!std::ranges::all_of(spines, [&](SwitchId spine_id) {
+            const Switch* spine = graph.find(spine_id);
+            return spine != nullptr && spine->ports.size() == expected.leaf_count;
+        })) {
+        return false;
+    }
+    return std::ranges::all_of(graph.racks(), [&](const Rack& rack) {
+        return rack_matches_clos(graph, rack, config, spines);
+    });
+}
+
 } // namespace
 
 bool ValidationReport::valid() const noexcept { return errors.empty(); }
 
 ValidationReport validate_topology(const TopologyGraph& graph) {
     return TopologyValidator{graph}.validate();
+}
+
+ValidationReport validate_clos_topology(const TopologyGraph& graph, const ClosConfig& config) {
+    const ClosDimensions expected = clos_dimensions(config);
+    ValidationReport report = validate_topology(graph);
+    if (!report.valid()) {
+        return report;
+    }
+
+    if (!matches_clos_shape(graph, config, expected)) {
+        report.errors.push_back(
+            ValidationError{ValidationErrorCode::TopologyShapeMismatch, std::nullopt, std::nullopt,
+                            "topology does not match the requested Clos profile"});
+    }
+    return report;
 }
 
 } // namespace nexuslab::topology

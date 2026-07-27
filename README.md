@@ -94,6 +94,15 @@ The benchmark disables tracing and reports insertion and dispatch throughput, ev
 resident memory, and peak resident memory. Cluster 1 baseline results and the post-baseline local
 regression guardrails are recorded in the architecture documentation.
 
+Topology scale benchmark:
+
+```bash
+bash scripts/benchmark-topology.sh
+```
+
+This runs fresh release processes at 64, 512, 2,048, and 8,192 GPUs and reports construction,
+validation, on-demand shortest-path query, memory, and canonical YAML serialization measurements.
+
 ## Architecture and roadmap
 
 - [Master engineering plan](NEXUSLAB_MASTER_PLAN.md)

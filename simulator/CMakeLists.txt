@@ -94,11 +94,26 @@ if(NEXUSLAB_BUILD_BENCHMARKS)
     target_link_libraries(nexuslab_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
     nexuslab_enable_clang_tidy(nexuslab_benchmarks)
 
+    add_executable(nexuslab_topology_benchmarks benchmarks/topology_benchmark.cpp)
+    target_link_libraries(
+        nexuslab_topology_benchmarks
+        PRIVATE NexusLab::core nexuslab_project_options
+    )
+    nexuslab_enable_clang_tidy(nexuslab_topology_benchmarks)
+
     if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         add_test(NAME nexuslab_benchmark_smoke COMMAND nexuslab_benchmarks --events 1000)
         set_tests_properties(
             nexuslab_benchmark_smoke
             PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=simulation_core"
+        )
+        add_test(
+            NAME nexuslab_topology_benchmark_smoke
+            COMMAND nexuslab_topology_benchmarks --gpus 64
+        )
+        set_tests_properties(
+            nexuslab_topology_benchmark_smoke
+            PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=topology"
         )
     endif()
 endif()
