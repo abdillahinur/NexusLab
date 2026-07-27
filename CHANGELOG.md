@@ -42,3 +42,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Deterministic two-GPU direct, single-rack, and configurable leaf-spine topology generators.
 - Clos-specific structural validation, required-scale coverage through 8,192 GPUs, and a topology
   benchmark harness.
+- Initial Cluster 2 topology performance, memory, and serialization baseline across all required
+  scales.
