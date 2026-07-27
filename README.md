@@ -9,9 +9,9 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 
 > [!IMPORTANT]
 > NexusLab has completed Cluster 0 (Project Foundation), Cluster 1 (Deterministic Simulation Core),
-> and Cluster 2 (Topology and Cluster Model). Cluster 3 (Link, Queue, and Transfer Model) has not
-> begun, so NexusLab does not yet simulate data movement, congestion, or training workloads, and no
-> performance or realism claims are made at this stage.
+> and Cluster 2 (Topology and Cluster Model). Cluster 3 (Link, Queue, and Transfer Model) architecture
+> is accepted and implementation is beginning. NexusLab does not yet simulate data movement,
+> congestion, or training workloads, and no performance or realism claims are made at this stage.
 
 ## Current foundation
 

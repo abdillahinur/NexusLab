@@ -52,6 +52,9 @@ Costs:
 
 Use configurable chunk-level transfers for the MVP. A chunk may represent a gradient-bucket segment, fixed transfer quantum, or collective message fragment. Packet-level mode is not part of version one.
 
+Detailed link service, queue admission, timing, drop, route, and failure behavior is defined in
+[ADR-006](ADR-006-link-queue-transfer-semantics.md).
+
 ## Rationale
 
 Chunk-level simulation provides the minimum useful fidelity for NexusLab's comparative queueing and collective experiments without making the target scale impractical from the outset.

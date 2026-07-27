@@ -3476,7 +3476,7 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | 0 | Project Foundation | Complete | Yes |
 | 1 | Deterministic Simulation Core | Complete | Yes |
 | 2 | Topology and Cluster Model | Complete | Yes |
-| 3 | Link, Queue, and Transfer Model | Not Started | No |
+| 3 | Link, Queue, and Transfer Model | In Progress | No |
 | 4 | Routing Policy Framework | Not Started | No |
 | 5 | Training Workload Engine | Not Started | No |
 | 6 | Collective Communication Engine | Not Started | No |

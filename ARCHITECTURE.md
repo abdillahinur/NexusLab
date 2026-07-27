@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the approved architectural direction through Cluster 2. Subsystem details
-will be added only as their implementation clusters reach review. The
+This document describes the gate-approved architecture through Cluster 2 and the accepted
+implementation direction for Cluster 3. Subsystem details will be added only as their implementation
+clusters reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
 ## System boundary
@@ -98,6 +99,25 @@ port-occupancy scans and the measured
 [linear-time validation optimization](docs/benchmarks/cluster-2-validation-optimization.md) removed
 that scaling risk. The [gate](docs/architecture-gates/cluster-2.md) defines local 2,048-GPU
 regression guardrails and preserves 8,192-GPU measurement for material topology changes.
+
+## Cluster 3 transport design
+
+Cluster 3 uses configurable chunk-level transfers over a runtime separate from the physical graph.
+Each directed fabric arc owns an independent work-conserving FIFO serializer, a finite waiting
+buffer, tail-drop accounting, and an optional marking threshold. Bandwidth, propagation latency,
+buffer capacity, and chunk size are explicit integer experiment inputs rather than hardware
+defaults.
+
+Serialization and propagation are separate phases so the next queued chunk can begin service while
+the prior chunk propagates. Routes are immutable per chunk; the initial helper uses one
+caller-supplied path for a transfer, while Cluster 4 may select paths per chunk at admission.
+Simulation-facing failures reconcile topology and transport state atomically, cancel active
+service, and deterministically drop affected active and queued chunks without retransmission.
+
+See [ADR-003](docs/adr/ADR-003-chunk-level-transfers.md) for the fidelity decision and
+[ADR-006](docs/adr/ADR-006-link-queue-transfer-semantics.md) for queue admission, integer timing,
+event ordering, failure, progress, and validation semantics. This architecture is accepted for
+implementation but remains subject to Architecture Gate 3 measurements.
 
 ## Policy boundaries
 
