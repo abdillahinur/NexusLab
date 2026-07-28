@@ -33,32 +33,10 @@ void TransportRuntime::register_chunk(RoutedChunk routed_chunk) {
     if (routed_chunk.chunk.hop_index != 0) {
         throw std::invalid_argument{"new routed chunk must begin at hop zero"};
     }
-    if (routed_chunk.route.empty()) {
-        throw std::invalid_argument{"routed chunk path must be nonempty"};
-    }
-    if (routed_chunk.route.size() >
-        static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
-        throw std::overflow_error{"routed chunk path exceeds hop-index range"};
-    }
-
-    std::optional<topology::DirectedLink> previous;
-    for (const topology::DirectedLinkId link : routed_chunk.route) {
-        const topology::DirectedLink directed = require_fabric_arc(link);
-        if (find_service(link) == nullptr) {
-            throw std::invalid_argument{"routed chunk path uses an unconfigured directed link"};
-        }
-        if (previous.has_value()) {
-            const topology::Port* preceding_destination = topology_->find(previous->destination);
-            const topology::Port* current_source = topology_->find(directed.source);
-            if (preceding_destination == nullptr || current_source == nullptr ||
-                preceding_destination->owner != current_source->owner) {
-                throw std::invalid_argument{"routed chunk path is not contiguous"};
-            }
-        }
-        previous = directed;
-    }
+    validate_route(routed_chunk.route, std::nullopt, std::nullopt);
 
     const ChunkId id = routed_chunk.chunk.id;
+    const TransferId transfer = routed_chunk.chunk.transfer;
     const auto [iterator, inserted] =
         chunks_.try_emplace(id, ChunkRecord{routed_chunk.chunk, std::move(routed_chunk.route),
                                             ChunkTransitState::Registered, 0, std::nullopt});
@@ -66,6 +44,52 @@ void TransportRuntime::register_chunk(RoutedChunk routed_chunk) {
     if (!inserted) {
         throw std::invalid_argument{"duplicate routed chunk identifier"};
     }
+    transfer_ids_.advance_past(transfer);
+    chunk_ids_.advance_past(id);
+}
+
+SubmittedTransfer TransportRuntime::submit_transfer(const TransferRequest& request,
+                                                    sim::SimulationContext& context) {
+    if (request.bytes.value() == 0) {
+        throw std::invalid_argument{"transfer byte count must be nonzero"};
+    }
+    if (request.maximum_chunk_bytes.value() == 0) {
+        throw std::invalid_argument{"maximum chunk byte count must be nonzero"};
+    }
+    validate_route(request.route, request.source, request.destination);
+
+    const std::uint64_t full_chunks = request.bytes.value() / request.maximum_chunk_bytes.value();
+    const std::uint64_t remainder = request.bytes.value() % request.maximum_chunk_bytes.value();
+    const std::uint64_t chunk_count = full_chunks + static_cast<std::uint64_t>(remainder != 0);
+    if (!transfer_ids_.can_generate(1) || !chunk_ids_.can_generate(chunk_count)) {
+        throw std::overflow_error{"transport ID sequence cannot represent submitted transfer"};
+    }
+    if (chunk_count > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max())) {
+        throw std::overflow_error{"chunk count exceeds runtime container range"};
+    }
+
+    std::vector<ByteCount> partitions;
+    partitions.reserve(static_cast<std::size_t>(chunk_count));
+    for (std::uint64_t ordinal = 0; ordinal < full_chunks; ++ordinal) {
+        partitions.push_back(request.maximum_chunk_bytes);
+    }
+    if (remainder != 0) {
+        partitions.emplace_back(remainder);
+    }
+
+    const TransferId transfer = transfer_ids_.next();
+    SubmittedTransfer submitted{transfer, {}};
+    submitted.chunks.reserve(partitions.size());
+    for (const ByteCount bytes : partitions) {
+        const ChunkId chunk = chunk_ids_.next();
+        register_chunk(RoutedChunk{
+            TransferChunk{transfer, chunk, bytes, 0, false},
+            request.route,
+        });
+        static_cast<void>(schedule_initial_arrival(chunk, context));
+        submitted.chunks.push_back(SubmittedChunk{chunk, bytes});
+    }
+    return submitted;
 }
 
 sim::EventId TransportRuntime::schedule_initial_arrival(ChunkId chunk,
@@ -232,6 +256,50 @@ topology::DirectedLink TransportRuntime::require_fabric_arc(topology::DirectedLi
         return directions[1];
     }
     throw std::invalid_argument{"transport link direction is invalid"};
+}
+
+void TransportRuntime::validate_route(std::span<const topology::DirectedLinkId> route,
+                                      std::optional<topology::NodeId> expected_source,
+                                      std::optional<topology::NodeId> expected_destination) const {
+    if (route.empty()) {
+        throw std::invalid_argument{"routed chunk path must be nonempty"};
+    }
+    if (route.size() > static_cast<std::size_t>(std::numeric_limits<std::uint32_t>::max())) {
+        throw std::overflow_error{"routed chunk path exceeds hop-index range"};
+    }
+
+    const topology::DirectedLink first = require_fabric_arc(route.front());
+    if (find_service(route.front()) == nullptr) {
+        throw std::invalid_argument{"routed chunk path uses an unconfigured directed link"};
+    }
+    topology::DirectedLink previous = first;
+    for (std::size_t index = 1; index < route.size(); ++index) {
+        const topology::DirectedLinkId link = route[index];
+        const topology::DirectedLink directed = require_fabric_arc(link);
+        if (find_service(link) == nullptr) {
+            throw std::invalid_argument{"routed chunk path uses an unconfigured directed link"};
+        }
+        const topology::Port* preceding_destination = topology_->find(previous.destination);
+        const topology::Port* current_source = topology_->find(directed.source);
+        if (preceding_destination == nullptr || current_source == nullptr ||
+            preceding_destination->owner != current_source->owner) {
+            throw std::invalid_argument{"routed chunk path is not contiguous"};
+        }
+        previous = directed;
+    }
+
+    if (expected_source.has_value()) {
+        const topology::Port* source = topology_->find(first.source);
+        if (source == nullptr || source->owner != *expected_source) {
+            throw std::invalid_argument{"routed transfer source does not match path"};
+        }
+    }
+    if (expected_destination.has_value()) {
+        const topology::Port* destination = topology_->find(previous.destination);
+        if (destination == nullptr || destination->owner != *expected_destination) {
+            throw std::invalid_argument{"routed transfer destination does not match path"};
+        }
+    }
 }
 
 TransportRuntime::ChunkRecord& TransportRuntime::require_chunk(ChunkId chunk) {

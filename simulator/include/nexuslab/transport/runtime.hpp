@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace nexuslab::sim {
@@ -25,6 +26,30 @@ struct RoutedChunk final {
     std::vector<topology::DirectedLinkId> route;
 
     bool operator==(const RoutedChunk&) const = default;
+};
+
+struct TransferRequest final {
+    topology::NodeId source;
+    topology::NodeId destination;
+    ByteCount bytes;
+    ByteCount maximum_chunk_bytes;
+    std::vector<topology::DirectedLinkId> route;
+
+    bool operator==(const TransferRequest&) const = default;
+};
+
+struct SubmittedChunk final {
+    ChunkId id;
+    ByteCount bytes;
+
+    bool operator==(const SubmittedChunk&) const = default;
+};
+
+struct SubmittedTransfer final {
+    TransferId id;
+    std::vector<SubmittedChunk> chunks;
+
+    bool operator==(const SubmittedTransfer&) const = default;
 };
 
 enum class ChunkTransitState : std::uint8_t {
@@ -50,6 +75,8 @@ class TransportRuntime final {
                      const std::vector<DirectedLinkConfiguration>& configurations);
 
     void register_chunk(RoutedChunk routed_chunk);
+    [[nodiscard]] SubmittedTransfer submit_transfer(const TransferRequest& request,
+                                                    sim::SimulationContext& context);
     [[nodiscard]] sim::EventId schedule_initial_arrival(ChunkId chunk,
                                                         sim::SimulationContext& context);
     [[nodiscard]] sim::EventId schedule_link_state_change(topology::LinkId link,
@@ -76,12 +103,17 @@ class TransportRuntime final {
     };
 
     [[nodiscard]] topology::DirectedLink require_fabric_arc(topology::DirectedLinkId link) const;
+    void validate_route(std::span<const topology::DirectedLinkId> route,
+                        std::optional<topology::NodeId> expected_source,
+                        std::optional<topology::NodeId> expected_destination) const;
     [[nodiscard]] ChunkRecord& require_chunk(ChunkId chunk);
     [[nodiscard]] DirectedLinkService& require_service(topology::DirectedLinkId link);
 
     void mark_dropped_link_down(const QueueDrain& drained, topology::DirectedLinkId link);
 
     topology::TopologyGraph* topology_;
+    SequentialTransportIdGenerator<TransferId> transfer_ids_;
+    SequentialTransportIdGenerator<ChunkId> chunk_ids_;
     std::map<topology::DirectedLinkId, DirectedLinkService> services_;
     std::map<ChunkId, ChunkRecord> chunks_;
 };

@@ -15,6 +15,7 @@ namespace {
 
 static_assert(!std::is_same_v<TransferId, ChunkId>);
 static_assert(!std::is_same_v<ByteCount, BitsPerSecond>);
+static_assert(!std::is_copy_constructible_v<SequentialTransportIdGenerator<TransferId>>);
 
 TEST(TransportTypesTest, KeepsIdentityAndQuantityKindsDistinctAndOrdered) {
     constexpr TransferId first_transfer{4};
@@ -28,6 +29,27 @@ TEST(TransportTypesTest, KeepsIdentityAndQuantityKindsDistinctAndOrdered) {
     EXPECT_EQ(chunk.value(), 4U);
     EXPECT_EQ(bytes.value(), 4U);
     EXPECT_EQ(bandwidth.value(), 4U);
+}
+
+TEST(TransportIdGeneratorTest, ReservesRangesAndRejectsExhaustion) {
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    SequentialTransportIdGenerator<ChunkId> generator{maximum - 1};
+
+    EXPECT_TRUE(generator.can_generate(2));
+    EXPECT_FALSE(generator.can_generate(3));
+    EXPECT_EQ(generator.next(), ChunkId{maximum - 1});
+    EXPECT_EQ(generator.next(), ChunkId{maximum});
+    EXPECT_FALSE(generator.can_generate(1));
+    EXPECT_THROW(static_cast<void>(generator.next()), std::overflow_error);
+}
+
+TEST(TransportIdGeneratorTest, AdvancesPastCallerSuppliedIdentifiers) {
+    SequentialTransportIdGenerator<TransferId> generator;
+
+    generator.advance_past(TransferId{7});
+    EXPECT_EQ(generator.next(), TransferId{8});
+    generator.advance_past(TransferId{3});
+    EXPECT_EQ(generator.next(), TransferId{9});
 }
 
 TEST(SerializationDelayTest, MatchesExactAnalyticalResults) {

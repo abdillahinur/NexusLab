@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -20,6 +21,8 @@ namespace {
 struct TwoHopFabric final {
     topology::DirectedLinkId first;
     topology::DirectedLinkId second;
+    topology::NodeId source;
+    topology::NodeId destination;
 };
 
 [[nodiscard]] TwoHopFabric populate_two_hop_fabric(topology::TopologyGraph& graph) {
@@ -36,6 +39,8 @@ struct TwoHopFabric final {
     return TwoHopFabric{
         topology::DirectedLinkId{first, topology::LinkDirection::AToB},
         topology::DirectedLinkId{second, topology::LinkDirection::AToB},
+        topology::NodeId{nic},
+        topology::NodeId{spine},
     };
 }
 
@@ -57,6 +62,17 @@ struct TwoHopFabric final {
     return RoutedChunk{
         TransferChunk{TransferId{7}, id, ByteCount{100}, 0, false},
         {link},
+    };
+}
+
+[[nodiscard]] TransferRequest transfer_request(const TwoHopFabric& fabric, std::uint64_t bytes,
+                                               std::uint64_t maximum_chunk_bytes) {
+    return TransferRequest{
+        fabric.source,
+        fabric.destination,
+        ByteCount{bytes},
+        ByteCount{maximum_chunk_bytes},
+        {fabric.first, fabric.second},
     };
 }
 
@@ -82,6 +98,9 @@ class RuntimeDispatcher final {
         for (const StateChange& change : state_changes_) {
             static_cast<void>(runtime_->schedule_link_state_change(change.link, change.state,
                                                                    change.timestamp, context));
+        }
+        for (const TransferRequest& request : requests_) {
+            submissions_.emplace_back(runtime_->submit_transfer(request, context));
         }
     }
 
@@ -111,13 +130,37 @@ class RuntimeDispatcher final {
         return deliveries_;
     }
 
+    void queue_submission(TransferRequest request) { requests_.push_back(std::move(request)); }
+
+    [[nodiscard]] const std::vector<SubmittedTransfer>& submissions() const noexcept {
+        return submissions_;
+    }
+
   private:
     TransportRuntime* runtime_;
     std::vector<ChunkId> starts_;
     std::vector<StateChange> state_changes_;
     std::vector<ChunkId> recovery_starts_;
+    std::vector<TransferRequest> requests_;
+    std::vector<SubmittedTransfer> submissions_;
     std::vector<std::pair<ChunkId, sim::SimTimeNs>> deliveries_;
 };
+
+struct SubmissionAttempt final {
+    sim::SimulationResult result;
+    std::vector<SubmittedTransfer> submissions;
+};
+
+[[nodiscard]] SubmissionAttempt attempt_submission(TransportRuntime& runtime,
+                                                   TransferRequest request) {
+    RuntimeDispatcher dispatcher{runtime, {}};
+    dispatcher.queue_submission(std::move(request));
+    sim::Simulation simulation{42};
+    static_cast<void>(simulation.schedule(sim::EventSpec{
+        sim::SimTimeNs{0}, sim::EventPriority::Normal, sim::EventPayload{sim::NoOpEvent{0}}}));
+    sim::SimulationResult result = simulation.run(dispatcher);
+    return SubmissionAttempt{std::move(result), dispatcher.submissions()};
+}
 
 [[nodiscard]] std::size_t count_scheduled_kind(std::span<const sim::TraceRecord> records,
                                                sim::EventPayloadKind kind,
@@ -157,6 +200,77 @@ TEST(TransportRuntimeTest, RejectsUnknownUnconfiguredAndNoncontiguousRoutes) {
     };
     EXPECT_THROW(incomplete_runtime.register_chunk(routed_chunk(ChunkId{0}, disconnected)),
                  std::invalid_argument);
+}
+
+TEST(TransportRuntimeTest, RejectsInvalidSubmissionBeforeConsumingIdentifiers) {
+    topology::TopologyGraph graph;
+    const TwoHopFabric fabric = populate_two_hop_fabric(graph);
+    TransportRuntime runtime{
+        graph,
+        {runtime_configuration(fabric.first), runtime_configuration(fabric.second)},
+    };
+
+    const SubmissionAttempt zero_bytes =
+        attempt_submission(runtime, transfer_request(fabric, 0, 1));
+    const SubmissionAttempt zero_chunk =
+        attempt_submission(runtime, transfer_request(fabric, 1, 0));
+    TransferRequest wrong_source = transfer_request(fabric, 1, 1);
+    wrong_source.source = fabric.destination;
+    const SubmissionAttempt mismatched_endpoint =
+        attempt_submission(runtime, std::move(wrong_source));
+    const SubmissionAttempt accepted = attempt_submission(runtime, transfer_request(fabric, 1, 1));
+
+    EXPECT_EQ(zero_bytes.result.status, sim::SimulationStatus::Failed);
+    EXPECT_EQ(zero_bytes.result.error, std::string{"transfer byte count must be nonzero"});
+    EXPECT_EQ(zero_chunk.result.status, sim::SimulationStatus::Failed);
+    EXPECT_EQ(zero_chunk.result.error, std::string{"maximum chunk byte count must be nonzero"});
+    EXPECT_EQ(mismatched_endpoint.result.status, sim::SimulationStatus::Failed);
+    EXPECT_EQ(mismatched_endpoint.result.error,
+              std::string{"routed transfer source does not match path"});
+    EXPECT_EQ(accepted.result.status, sim::SimulationStatus::Completed);
+    EXPECT_EQ(accepted.submissions,
+              (std::vector{
+                  SubmittedTransfer{TransferId{0}, {SubmittedChunk{ChunkId{0}, ByteCount{1}}}}}));
+}
+
+TEST(TransportRuntimeTest, PartitionsTransfersAndAssignsIdsInSubmissionOrdinalOrder) {
+    topology::TopologyGraph graph;
+    const TwoHopFabric fabric = populate_two_hop_fabric(graph);
+    TransportRuntime runtime{
+        graph,
+        {runtime_configuration(fabric.first), runtime_configuration(fabric.second)},
+    };
+    RuntimeDispatcher dispatcher{runtime, {}};
+    dispatcher.queue_submission(transfer_request(fabric, 250, 100));
+    dispatcher.queue_submission(transfer_request(fabric, 50, 100));
+    sim::Simulation simulation{42};
+    static_cast<void>(simulation.schedule(sim::EventSpec{
+        sim::SimTimeNs{10}, sim::EventPriority::Normal, sim::EventPayload{sim::NoOpEvent{0}}}));
+
+    const sim::SimulationResult result = simulation.run(dispatcher);
+
+    EXPECT_EQ(result.status, sim::SimulationStatus::Completed);
+    EXPECT_EQ(result.final_time, sim::SimTimeNs{460});
+    EXPECT_EQ(dispatcher.submissions(), (std::vector{
+                                            SubmittedTransfer{
+                                                TransferId{0},
+                                                {
+                                                    SubmittedChunk{ChunkId{0}, ByteCount{100}},
+                                                    SubmittedChunk{ChunkId{1}, ByteCount{100}},
+                                                    SubmittedChunk{ChunkId{2}, ByteCount{50}},
+                                                },
+                                            },
+                                            SubmittedTransfer{
+                                                TransferId{1},
+                                                {SubmittedChunk{ChunkId{3}, ByteCount{50}}},
+                                            },
+                                        }));
+    EXPECT_EQ(dispatcher.deliveries(), (std::vector{
+                                           std::pair{ChunkId{0}, sim::SimTimeNs{260}},
+                                           std::pair{ChunkId{1}, sim::SimTimeNs{360}},
+                                           std::pair{ChunkId{2}, sim::SimTimeNs{410}},
+                                           std::pair{ChunkId{3}, sim::SimTimeNs{460}},
+                                       }));
 }
 
 // GTest assertion macros inflate clang-tidy's cognitive-complexity count.
