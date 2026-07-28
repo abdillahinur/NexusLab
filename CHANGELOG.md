@@ -50,3 +50,7 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Cluster 3 deterministic link, FIFO queue, chunk transfer, timing, drop, and failure semantics.
 - Strong transfer identity, byte-count, and bandwidth types with checked integer serialization
   delay.
+- Validated per-direction fabric configuration and deterministic FIFO queue admission with
+  work-conserving service, finite waiting buffers, marking, and tail drop.
+- Typed chunk-arrival and transmission-completion events with stable trace kinds and exact
+  control-priority serialization scheduling.
