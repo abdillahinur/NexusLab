@@ -36,6 +36,12 @@ template <typename Handler> class NoOpDispatcher final {
         throw std::logic_error{"unexpected transmission-completion event in no-op dispatcher"};
     }
 
+    void operator()(const transport::LinkStateChangeEvent& event, sim::SimulationContext& context) {
+        static_cast<void>(event);
+        static_cast<void>(context);
+        throw std::logic_error{"unexpected link-state event in no-op dispatcher"};
+    }
+
   private:
     Handler handler_;
 };

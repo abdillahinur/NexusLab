@@ -4,6 +4,7 @@
 #pragma once
 
 #include "nexuslab/sim/event_id.hpp"
+#include "nexuslab/sim/time.hpp"
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/transport/events.hpp"
 #include "nexuslab/transport/link_service.hpp"
@@ -45,15 +46,21 @@ struct ChunkTransitSnapshot final {
 
 class TransportRuntime final {
   public:
-    TransportRuntime(const topology::TopologyGraph& topology,
+    TransportRuntime(topology::TopologyGraph& topology,
                      const std::vector<DirectedLinkConfiguration>& configurations);
 
     void register_chunk(RoutedChunk routed_chunk);
     [[nodiscard]] sim::EventId schedule_initial_arrival(ChunkId chunk,
                                                         sim::SimulationContext& context);
+    [[nodiscard]] sim::EventId schedule_link_state_change(topology::LinkId link,
+                                                          topology::OperationalState state,
+                                                          sim::SimTimeNs timestamp,
+                                                          sim::SimulationContext& context);
 
     void handle_arrival(const ChunkArrivalEvent& event, sim::SimulationContext& context);
     void handle_completion(const TransmissionCompleteEvent& event, sim::SimulationContext& context);
+    void handle_link_state_change(const LinkStateChangeEvent& event,
+                                  sim::SimulationContext& context);
 
     [[nodiscard]] std::optional<ChunkTransitSnapshot> chunk_snapshot(ChunkId chunk) const noexcept;
     [[nodiscard]] const DirectedLinkService*
@@ -72,7 +79,9 @@ class TransportRuntime final {
     [[nodiscard]] ChunkRecord& require_chunk(ChunkId chunk);
     [[nodiscard]] DirectedLinkService& require_service(topology::DirectedLinkId link);
 
-    const topology::TopologyGraph* topology_;
+    void mark_dropped_link_down(const QueueDrain& drained, topology::DirectedLinkId link);
+
+    topology::TopologyGraph* topology_;
     std::map<topology::DirectedLinkId, DirectedLinkService> services_;
     std::map<ChunkId, ChunkRecord> chunks_;
 };

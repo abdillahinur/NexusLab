@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <vector>
 
 namespace nexuslab::transport {
 
@@ -64,6 +65,13 @@ struct QueueSnapshot final {
     bool operator==(const QueueSnapshot&) const = default;
 };
 
+struct QueueDrain final {
+    std::optional<TransferChunk> active;
+    std::vector<TransferChunk> waiting;
+
+    bool operator==(const QueueDrain&) const = default;
+};
+
 class DirectedLinkQueue final {
   public:
     explicit DirectedLinkQueue(DirectedLinkConfiguration configuration);
@@ -74,6 +82,7 @@ class DirectedLinkQueue final {
 
     [[nodiscard]] AdmissionResult admit(TransferChunk chunk);
     [[nodiscard]] std::optional<ServiceTransition> complete_service();
+    [[nodiscard]] QueueDrain drain();
 
   private:
     DirectedLinkConfiguration configuration_;

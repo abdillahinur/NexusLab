@@ -28,7 +28,8 @@ struct NoOpEvent final {
 };
 
 using EventPayload =
-    std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent>;
+    std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent,
+                 transport::LinkStateChangeEvent>;
 
 struct EventSpec final {
     SimTimeNs timestamp;

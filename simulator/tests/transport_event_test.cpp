@@ -56,6 +56,12 @@ class ServiceDispatcher final {
         completion_times_.push_back(context.now());
     }
 
+    void operator()(const LinkStateChangeEvent& event, sim::SimulationContext& context) {
+        static_cast<void>(event);
+        static_cast<void>(context);
+        throw std::logic_error{"link-state changes are not integrated in this service slice"};
+    }
+
     [[nodiscard]] const std::vector<AdmissionResult>& admissions() const noexcept {
         return admissions_;
     }
@@ -84,12 +90,19 @@ TEST(TransportEventTest, UsesExplicitStablePayloadKindsWithinEventSizeBudget) {
         3,
         topology::LinkDirection::BToA,
     };
+    const LinkStateChangeEvent state_change{
+        topology::LinkId{4},
+        topology::OperationalState::Down,
+    };
 
     EXPECT_EQ(sim::payload_kind(sim::EventPayload{arrival}), sim::EventPayloadKind::ChunkArrival);
     EXPECT_EQ(sim::payload_kind(sim::EventPayload{completion}),
               sim::EventPayloadKind::TransmissionComplete);
+    EXPECT_EQ(sim::payload_kind(sim::EventPayload{state_change}),
+              sim::EventPayloadKind::LinkStateChange);
     EXPECT_EQ(static_cast<std::uint8_t>(sim::EventPayloadKind::ChunkArrival), 2U);
     EXPECT_EQ(static_cast<std::uint8_t>(sim::EventPayloadKind::TransmissionComplete), 3U);
+    EXPECT_EQ(static_cast<std::uint8_t>(sim::EventPayloadKind::LinkStateChange), 4U);
     EXPECT_LE(sizeof(sim::EventPayload), 32U);
     EXPECT_LE(sizeof(sim::Event), 80U);
 }

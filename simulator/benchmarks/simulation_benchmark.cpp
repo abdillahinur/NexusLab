@@ -56,6 +56,13 @@ class BenchmarkDispatcher final {
         throw std::logic_error{"unexpected transmission-completion event in simulation benchmark"};
     }
 
+    void operator()(const nexuslab::transport::LinkStateChangeEvent& event,
+                    SimulationContext& context) const {
+        static_cast<void>(event);
+        static_cast<void>(context);
+        throw std::logic_error{"unexpected link-state event in simulation benchmark"};
+    }
+
   private:
     std::uint64_t* checksum_;
 };

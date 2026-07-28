@@ -53,15 +53,35 @@ struct TwoHopFabric final {
     };
 }
 
+[[nodiscard]] RoutedChunk one_hop_chunk(ChunkId id, topology::DirectedLinkId link) {
+    return RoutedChunk{
+        TransferChunk{TransferId{7}, id, ByteCount{100}, 0, false},
+        {link},
+    };
+}
+
 class RuntimeDispatcher final {
   public:
-    RuntimeDispatcher(TransportRuntime& runtime, std::vector<ChunkId> starts)
-        : runtime_{&runtime}, starts_{std::move(starts)} {}
+    struct StateChange final {
+        topology::LinkId link;
+        topology::OperationalState state;
+        sim::SimTimeNs timestamp;
+    };
+
+    RuntimeDispatcher(TransportRuntime& runtime, std::vector<ChunkId> starts,
+                      std::vector<StateChange> state_changes = {},
+                      std::vector<ChunkId> recovery_starts = {})
+        : runtime_{&runtime}, starts_{std::move(starts)}, state_changes_{std::move(state_changes)},
+          recovery_starts_{std::move(recovery_starts)} {}
 
     void operator()(const sim::NoOpEvent& event, sim::SimulationContext& context) {
         static_cast<void>(event);
         for (const ChunkId chunk : starts_) {
             static_cast<void>(runtime_->schedule_initial_arrival(chunk, context));
+        }
+        for (const StateChange& change : state_changes_) {
+            static_cast<void>(runtime_->schedule_link_state_change(change.link, change.state,
+                                                                   change.timestamp, context));
         }
     }
 
@@ -77,6 +97,15 @@ class RuntimeDispatcher final {
         runtime_->handle_completion(event, context);
     }
 
+    void operator()(const LinkStateChangeEvent& event, sim::SimulationContext& context) {
+        runtime_->handle_link_state_change(event, context);
+        if (event.state == topology::OperationalState::Up) {
+            for (const ChunkId chunk : recovery_starts_) {
+                static_cast<void>(runtime_->schedule_initial_arrival(chunk, context));
+            }
+        }
+    }
+
     [[nodiscard]] const std::vector<std::pair<ChunkId, sim::SimTimeNs>>&
     deliveries() const noexcept {
         return deliveries_;
@@ -85,6 +114,8 @@ class RuntimeDispatcher final {
   private:
     TransportRuntime* runtime_;
     std::vector<ChunkId> starts_;
+    std::vector<StateChange> state_changes_;
+    std::vector<ChunkId> recovery_starts_;
     std::vector<std::pair<ChunkId, sim::SimTimeNs>> deliveries_;
 };
 
@@ -213,6 +244,91 @@ TEST(TransportRuntimeTest, DropsAtArrivalWhenRemainingLinkIsDown) {
     EXPECT_TRUE(dispatcher.deliveries().empty());
     EXPECT_EQ(runtime.chunk_snapshot(ChunkId{0}),
               (ChunkTransitSnapshot{ChunkTransitState::DroppedLinkDown, 1, false}));
+}
+
+// GTest assertion macros inflate clang-tidy's cognitive-complexity count.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST(TransportRuntimeTest, FailureDrainsBothDirectionsAndRecoveryStartsEmpty) {
+    topology::TopologyGraph graph;
+    const TwoHopFabric fabric = populate_two_hop_fabric(graph);
+    const topology::DirectedLinkId reverse{
+        fabric.first.link,
+        topology::LinkDirection::BToA,
+    };
+    TransportRuntime runtime{
+        graph,
+        {runtime_configuration(fabric.first), runtime_configuration(reverse)},
+    };
+    runtime.register_chunk(one_hop_chunk(ChunkId{0}, fabric.first));
+    runtime.register_chunk(one_hop_chunk(ChunkId{1}, fabric.first));
+    runtime.register_chunk(one_hop_chunk(ChunkId{2}, fabric.first));
+    runtime.register_chunk(one_hop_chunk(ChunkId{3}, reverse));
+    RuntimeDispatcher dispatcher{
+        runtime,
+        {ChunkId{0}, ChunkId{1}, ChunkId{3}},
+        {
+            {fabric.first.link, topology::OperationalState::Down, sim::SimTimeNs{110}},
+            {fabric.first.link, topology::OperationalState::Up, sim::SimTimeNs{120}},
+        },
+        {ChunkId{2}},
+    };
+    sim::Simulation simulation{42};
+    static_cast<void>(simulation.schedule(sim::EventSpec{
+        sim::SimTimeNs{10}, sim::EventPriority::Normal, sim::EventPayload{sim::NoOpEvent{0}}}));
+
+    const sim::SimulationResult result = simulation.run(dispatcher);
+
+    EXPECT_EQ(result.status, sim::SimulationStatus::Completed);
+    EXPECT_EQ(result.final_time, sim::SimTimeNs{245});
+    EXPECT_EQ(result.cancelled_events, 2U);
+    EXPECT_EQ(runtime.chunk_snapshot(ChunkId{0}),
+              (ChunkTransitSnapshot{ChunkTransitState::DroppedLinkDown, 0, false}));
+    EXPECT_EQ(runtime.chunk_snapshot(ChunkId{1}),
+              (ChunkTransitSnapshot{ChunkTransitState::DroppedLinkDown, 0, false}));
+    EXPECT_EQ(runtime.chunk_snapshot(ChunkId{2}),
+              (ChunkTransitSnapshot{ChunkTransitState::Delivered, 1, false}));
+    EXPECT_EQ(runtime.chunk_snapshot(ChunkId{3}),
+              (ChunkTransitSnapshot{ChunkTransitState::DroppedLinkDown, 0, false}));
+    EXPECT_EQ(dispatcher.deliveries(), (std::vector{std::pair{ChunkId{2}, sim::SimTimeNs{245}}}));
+    ASSERT_NE(runtime.find_service(fabric.first), nullptr);
+    EXPECT_EQ(runtime.find_service(fabric.first)->queue().snapshot(),
+              (QueueSnapshot{ByteCount{0}, 0, ByteCount{100}, 1, false}));
+    EXPECT_FALSE(runtime.find_service(fabric.first)->scheduled_completion().has_value());
+    ASSERT_NE(runtime.find_service(reverse), nullptr);
+    EXPECT_EQ(runtime.find_service(reverse)->queue().snapshot(),
+              (QueueSnapshot{ByteCount{0}, 0, ByteCount{0}, 0, false}));
+    EXPECT_FALSE(runtime.find_service(reverse)->scheduled_completion().has_value());
+    EXPECT_EQ(count_scheduled_kind(simulation.trace_records(),
+                                   sim::EventPayloadKind::LinkStateChange,
+                                   sim::EventPriority::Critical),
+              2U);
+}
+
+TEST(TransportRuntimeTest, FailureDoesNotRecallChunkAlreadyPropagating) {
+    topology::TopologyGraph graph;
+    const TwoHopFabric fabric = populate_two_hop_fabric(graph);
+    TransportRuntime runtime{
+        graph,
+        {runtime_configuration(fabric.first), runtime_configuration(fabric.second)},
+    };
+    runtime.register_chunk(routed_chunk(ChunkId{0}, fabric));
+    RuntimeDispatcher dispatcher{
+        runtime,
+        {ChunkId{0}},
+        {{fabric.first.link, topology::OperationalState::Down, sim::SimTimeNs{120}}},
+    };
+    sim::Simulation simulation{42};
+    static_cast<void>(simulation.schedule(sim::EventSpec{
+        sim::SimTimeNs{10}, sim::EventPriority::Normal, sim::EventPayload{sim::NoOpEvent{0}}}));
+
+    const sim::SimulationResult result = simulation.run(dispatcher);
+
+    EXPECT_EQ(result.status, sim::SimulationStatus::Completed);
+    EXPECT_EQ(result.final_time, sim::SimTimeNs{260});
+    EXPECT_EQ(result.cancelled_events, 0U);
+    EXPECT_EQ(runtime.chunk_snapshot(ChunkId{0}),
+              (ChunkTransitSnapshot{ChunkTransitState::Delivered, 2, false}));
+    EXPECT_EQ(dispatcher.deliveries(), (std::vector{std::pair{ChunkId{0}, sim::SimTimeNs{260}}}));
 }
 
 } // namespace

@@ -83,6 +83,16 @@ ServiceTransition DirectedLinkService::handle_completion(const TransmissionCompl
     return *transition;
 }
 
+QueueDrain DirectedLinkService::reconcile_down(sim::SimulationContext& context) {
+    if (scheduled_completion_.has_value()) {
+        if (!context.cancel(*scheduled_completion_)) {
+            throw std::logic_error{"active transmission completion could not be cancelled"};
+        }
+        scheduled_completion_.reset();
+    }
+    return queue_.drain();
+}
+
 sim::EventId DirectedLinkService::schedule_completion(const TransferChunk& chunk,
                                                       sim::SimulationContext& context) {
     const auto delay = serialization_delay(chunk.bytes, queue_.configuration().bandwidth);

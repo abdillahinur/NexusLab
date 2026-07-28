@@ -10,6 +10,7 @@
 #include <limits>
 #include <optional>
 #include <stdexcept>
+#include <vector>
 
 namespace nexuslab::transport {
 namespace {
@@ -158,6 +159,21 @@ TEST(DirectedLinkQueueTest, OppositeDirectionsMaintainIndependentState) {
 
     EXPECT_EQ(forward.snapshot(), (QueueSnapshot{ByteCount{40}, 1, ByteCount{40}, 1, true}));
     EXPECT_EQ(reverse.snapshot(), (QueueSnapshot{ByteCount{0}, 0, ByteCount{0}, 0, true}));
+}
+
+TEST(DirectedLinkQueueTest, DrainsActiveAndWaitingChunksInFifoOrder) {
+    DirectedLinkQueue queue{configuration()};
+    const TransferChunk active = chunk({0, 10});
+    const TransferChunk first_waiting = chunk({1, 20});
+    const TransferChunk second_waiting = chunk({2, 30});
+    static_cast<void>(queue.admit(active));
+    static_cast<void>(queue.admit(first_waiting));
+    static_cast<void>(queue.admit(second_waiting));
+
+    EXPECT_EQ(queue.drain(),
+              (QueueDrain{active, std::vector<TransferChunk>{first_waiting, second_waiting}}));
+    EXPECT_EQ(queue.snapshot(), (QueueSnapshot{ByteCount{0}, 0, ByteCount{50}, 2, false}));
+    EXPECT_EQ(queue.drain(), (QueueDrain{std::nullopt, {}}));
 }
 
 } // namespace

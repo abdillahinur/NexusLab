@@ -55,3 +55,5 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Typed chunk-arrival and transmission-completion events with stable trace kinds and exact
   control-priority serialization scheduling.
 - Runtime-owned fixed chunk routes with validated multi-hop arrival, propagation, and delivery.
+- Critical link-state events with active-completion cancellation, deterministic queue draining, and
+  empty-service recovery.

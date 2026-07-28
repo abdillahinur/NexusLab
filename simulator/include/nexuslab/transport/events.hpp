@@ -26,4 +26,11 @@ struct TransmissionCompleteEvent final {
     bool operator==(const TransmissionCompleteEvent&) const = default;
 };
 
+struct LinkStateChangeEvent final {
+    topology::LinkId link;
+    topology::OperationalState state;
+
+    bool operator==(const LinkStateChangeEvent&) const = default;
+};
+
 } // namespace nexuslab::transport

@@ -25,6 +25,7 @@ class DirectedLinkService final {
     [[nodiscard]] AdmissionResult admit(TransferChunk chunk, sim::SimulationContext& context);
     [[nodiscard]] ServiceTransition handle_completion(const TransmissionCompleteEvent& event,
                                                       sim::SimulationContext& context);
+    [[nodiscard]] QueueDrain reconcile_down(sim::SimulationContext& context);
 
   private:
     [[nodiscard]] sim::EventId schedule_completion(const TransferChunk& chunk,

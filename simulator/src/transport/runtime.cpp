@@ -13,7 +13,7 @@
 
 namespace nexuslab::transport {
 
-TransportRuntime::TransportRuntime(const topology::TopologyGraph& topology,
+TransportRuntime::TransportRuntime(topology::TopologyGraph& topology,
                                    const std::vector<DirectedLinkConfiguration>& configurations)
     : topology_{&topology} {
     for (const DirectedLinkConfiguration& configuration : configurations) {
@@ -85,6 +85,28 @@ sim::EventId TransportRuntime::schedule_initial_arrival(ChunkId chunk,
     return event_id;
 }
 
+sim::EventId TransportRuntime::schedule_link_state_change(topology::LinkId link,
+                                                          topology::OperationalState state,
+                                                          sim::SimTimeNs timestamp,
+                                                          sim::SimulationContext& context) {
+    const topology::PhysicalLink* physical = topology_->find(link);
+    if (physical == nullptr || physical->kind != topology::LinkKind::Fabric) {
+        throw std::invalid_argument{"state change must identify a known fabric link"};
+    }
+    switch (state) {
+    case topology::OperationalState::Up:
+    case topology::OperationalState::Down:
+        break;
+    default:
+        throw std::invalid_argument{"link operational state is invalid"};
+    }
+    return context.schedule(sim::EventSpec{
+        timestamp,
+        sim::EventPriority::Critical,
+        sim::EventPayload{LinkStateChangeEvent{link, state}},
+    });
+}
+
 void TransportRuntime::handle_arrival(const ChunkArrivalEvent& event,
                                       sim::SimulationContext& context) {
     ChunkRecord& record = require_chunk(event.chunk);
@@ -150,6 +172,38 @@ void TransportRuntime::handle_completion(const TransmissionCompleteEvent& event,
     record.scheduled_arrival = arrival;
 }
 
+void TransportRuntime::handle_link_state_change(const LinkStateChangeEvent& event,
+                                                sim::SimulationContext& context) {
+    const topology::PhysicalLink* physical = topology_->find(event.link);
+    if (physical == nullptr || physical->kind != topology::LinkKind::Fabric) {
+        throw std::invalid_argument{"state change must identify a known fabric link"};
+    }
+    switch (event.state) {
+    case topology::OperationalState::Up:
+    case topology::OperationalState::Down:
+        break;
+    default:
+        throw std::invalid_argument{"link operational state is invalid"};
+    }
+    if (!topology_->set_link_state(event.link, event.state)) {
+        throw std::logic_error{"known fabric link state could not be changed"};
+    }
+    if (event.state == topology::OperationalState::Up) {
+        return;
+    }
+
+    for (const topology::LinkDirection direction :
+         {topology::LinkDirection::AToB, topology::LinkDirection::BToA}) {
+        const topology::DirectedLinkId directed{event.link, direction};
+        const auto service = services_.find(directed);
+        if (service == services_.end()) {
+            continue;
+        }
+        const QueueDrain drained = service->second.reconcile_down(context);
+        mark_dropped_link_down(drained, directed);
+    }
+}
+
 std::optional<ChunkTransitSnapshot> TransportRuntime::chunk_snapshot(ChunkId chunk) const noexcept {
     const auto iterator = chunks_.find(chunk);
     if (iterator == chunks_.end()) {
@@ -194,6 +248,27 @@ DirectedLinkService& TransportRuntime::require_service(topology::DirectedLinkId 
         throw std::invalid_argument{"unknown directed-link transport service"};
     }
     return iterator->second;
+}
+
+void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
+                                              topology::DirectedLinkId link) {
+    const auto mark = [this, link](const TransferChunk& chunk) {
+        ChunkRecord& record = require_chunk(chunk.id);
+        if (record.state != ChunkTransitState::Admitted || record.hop_index != chunk.hop_index ||
+            static_cast<std::size_t>(record.hop_index) >= record.route.size() ||
+            record.route[record.hop_index] != link) {
+            throw std::logic_error{"drained service chunk does not match routed chunk state"};
+        }
+        record.chunk = chunk;
+        record.state = ChunkTransitState::DroppedLinkDown;
+    };
+
+    if (drained.active.has_value()) {
+        mark(*drained.active);
+    }
+    for (const TransferChunk& chunk : drained.waiting) {
+        mark(chunk);
+    }
 }
 
 } // namespace nexuslab::transport

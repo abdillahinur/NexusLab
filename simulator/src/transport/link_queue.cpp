@@ -103,4 +103,16 @@ std::optional<ServiceTransition> DirectedLinkQueue::complete_service() {
     return ServiceTransition{completed, next_started};
 }
 
+QueueDrain DirectedLinkQueue::drain() {
+    QueueDrain drained{active_, {}};
+    drained.waiting.reserve(waiting_.size());
+    while (!waiting_.empty()) {
+        drained.waiting.push_back(waiting_.front());
+        waiting_.pop_front();
+    }
+    active_.reset();
+    waiting_bytes_ = 0;
+    return drained;
+}
+
 } // namespace nexuslab::transport
