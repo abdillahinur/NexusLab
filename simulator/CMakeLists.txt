@@ -10,6 +10,7 @@ add_library(
     src/sim/trace.cpp
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
+    src/transport/runtime.cpp
     src/transport/timing.cpp
     src/topology/clos.cpp
     src/topology/entities.cpp
@@ -50,6 +51,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/trace_test.cpp
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp
+        tests/transport_runtime_test.cpp
         tests/topology_clos_test.cpp
         tests/topology_entities_test.cpp
         tests/topology_export_test.cpp

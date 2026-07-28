@@ -54,3 +54,4 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   work-conserving service, finite waiting buffers, marking, and tail drop.
 - Typed chunk-arrival and transmission-completion events with stable trace kinds and exact
   control-priority serialization scheduling.
+- Runtime-owned fixed chunk routes with validated multi-hop arrival, propagation, and delivery.
