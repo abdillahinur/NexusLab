@@ -81,7 +81,11 @@ class Simulation final {
 
     template <typename Dispatcher> [[nodiscard]] SimulationResult run(Dispatcher& dispatcher) {
         static_assert(
-            std::is_invocable_v<Dispatcher&, const NoOpEvent&, SimulationContext&>,
+            std::is_invocable_v<Dispatcher&, const NoOpEvent&, SimulationContext&> &&
+                std::is_invocable_v<Dispatcher&, const transport::ChunkArrivalEvent&,
+                                    SimulationContext&> &&
+                std::is_invocable_v<Dispatcher&, const transport::TransmissionCompleteEvent&,
+                                    SimulationContext&>,
             "dispatcher must handle every EventPayload alternative with SimulationContext");
 
         begin_run();

@@ -32,6 +32,34 @@ using nexuslab::sim::SimulationStatus;
 using nexuslab::sim::TraceMode;
 
 constexpr std::uint64_t default_event_count = 1'000'000;
+
+class BenchmarkDispatcher final {
+  public:
+    explicit BenchmarkDispatcher(std::uint64_t& checksum) noexcept : checksum_{&checksum} {}
+
+    void operator()(const NoOpEvent& event, SimulationContext& context) const noexcept {
+        static_cast<void>(context);
+        *checksum_ ^= event.token + 0x9e3779b97f4a7c15ULL + (*checksum_ << 6U) + (*checksum_ >> 2U);
+    }
+
+    void operator()(const nexuslab::transport::ChunkArrivalEvent& event,
+                    SimulationContext& context) const {
+        static_cast<void>(event);
+        static_cast<void>(context);
+        throw std::logic_error{"unexpected chunk-arrival event in simulation benchmark"};
+    }
+
+    void operator()(const nexuslab::transport::TransmissionCompleteEvent& event,
+                    SimulationContext& context) const {
+        static_cast<void>(event);
+        static_cast<void>(context);
+        throw std::logic_error{"unexpected transmission-completion event in simulation benchmark"};
+    }
+
+  private:
+    std::uint64_t* checksum_;
+};
+
 struct BenchmarkResult final {
     std::uint64_t event_count;
     std::uint64_t insertion_elapsed_ns;
@@ -90,9 +118,7 @@ struct BenchmarkResult final {
     const std::uint64_t rss_after_insertion_kib = current_rss_kib();
 
     std::uint64_t checksum = 0;
-    auto dispatcher = [&checksum](const NoOpEvent& event, SimulationContext&) {
-        checksum ^= event.token + 0x9e3779b97f4a7c15ULL + (checksum << 6U) + (checksum >> 2U);
-    };
+    BenchmarkDispatcher dispatcher{checksum};
     const auto dispatch_started = std::chrono::steady_clock::now();
     SimulationResult result = simulation.run(dispatcher);
     const auto dispatch_finished = std::chrono::steady_clock::now();

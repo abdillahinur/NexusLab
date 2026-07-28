@@ -5,6 +5,7 @@
 
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/sim/time.hpp"
+#include "nexuslab/transport/events.hpp"
 
 #include <compare>
 #include <cstdint>
@@ -26,7 +27,8 @@ struct NoOpEvent final {
     auto operator<=>(const NoOpEvent&) const = default;
 };
 
-using EventPayload = std::variant<NoOpEvent>;
+using EventPayload =
+    std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent>;
 
 struct EventSpec final {
     SimTimeNs timestamp;

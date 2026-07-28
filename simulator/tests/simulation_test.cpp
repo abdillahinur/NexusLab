@@ -3,6 +3,7 @@
 
 #include "nexuslab/sim/event.hpp"
 #include "nexuslab/sim/simulation.hpp"
+#include "support/noop_dispatcher.hpp"
 
 #include <gtest/gtest.h>
 
@@ -35,7 +36,7 @@ template <typename Operation> [[nodiscard]] bool throws_logic_error(Operation&& 
 
 TEST(SimulationTest, EmptyQueueCompletesAtTimeZero) {
     Simulation simulation{42};
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {};
+    auto dispatcher = nexuslab::test::NoOpDispatcher{[](const NoOpEvent&, SimulationContext&) {}};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -51,10 +52,11 @@ TEST(SimulationTest, DispatchesInQueueOrderAndAdvancesClock) {
     static_cast<void>(simulation.schedule(no_op_at(200, 2)));
     std::vector<std::uint64_t> tokens;
     std::vector<SimTimeNs> times;
-    auto dispatcher = [&tokens, &times](const NoOpEvent& event, SimulationContext& context) {
-        tokens.push_back(event.token);
-        times.push_back(context.now());
-    };
+    auto dispatcher = nexuslab::test::NoOpDispatcher{
+        [&tokens, &times](const NoOpEvent& event, SimulationContext& context) {
+            tokens.push_back(event.token);
+            times.push_back(context.now());
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -73,15 +75,16 @@ TEST(SimulationTest, EventCanScheduleAnotherEventAtCurrentTime) {
     std::vector<EventId> ids;
     std::optional<EventId> scheduled_id;
     std::optional<EventId> scheduled_cause;
-    auto dispatcher = [&](const NoOpEvent& event, SimulationContext& context) {
-        tokens.push_back(event.token);
-        ids.push_back(context.current_event_id());
-        if (event.token == 1) {
-            scheduled_id = context.schedule(no_op_at(context.now().count(), 3));
-        } else if (event.token == 3) {
-            scheduled_cause = context.cause();
-        }
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[&](const NoOpEvent& event, SimulationContext& context) {
+            tokens.push_back(event.token);
+            ids.push_back(context.current_event_id());
+            if (event.token == 1) {
+                scheduled_id = context.schedule(no_op_at(context.now().count(), 3));
+            } else if (event.token == 3) {
+                scheduled_cause = context.cause();
+            }
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -95,9 +98,10 @@ TEST(SimulationTest, EventCanScheduleAnotherEventAtCurrentTime) {
 TEST(SimulationTest, RejectsSchedulingInThePastDuringDispatch) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
-    auto dispatcher = [](const NoOpEvent&, SimulationContext& context) {
-        static_cast<void>(context.schedule(no_op_at(99, 2)));
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[](const NoOpEvent&, SimulationContext& context) {
+            static_cast<void>(context.schedule(no_op_at(99, 2)));
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -112,9 +116,10 @@ TEST(SimulationTest, CancelsPendingEventsBeforeRun) {
     const EventId dispatched = simulation.schedule(no_op_at(100, 1));
     const EventId cancelled = simulation.schedule(no_op_at(200, 2));
     std::vector<EventId> ids;
-    auto dispatcher = [&ids](const NoOpEvent&, SimulationContext& context) {
-        ids.push_back(context.current_event_id());
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[&ids](const NoOpEvent&, SimulationContext& context) {
+            ids.push_back(context.current_event_id());
+        }};
 
     const bool first_cancellation = simulation.cancel(cancelled);
     const bool repeated_cancellation = simulation.cancel(cancelled);
@@ -134,12 +139,13 @@ TEST(SimulationTest, EventCanCancelAnotherPendingEvent) {
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
     const EventId cancelled = simulation.schedule(no_op_at(200, 2));
     std::vector<std::uint64_t> tokens;
-    auto dispatcher = [&](const NoOpEvent& event, SimulationContext& context) {
-        tokens.push_back(event.token);
-        if (event.token == 1) {
-            EXPECT_TRUE(context.cancel(cancelled));
-        }
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[&](const NoOpEvent& event, SimulationContext& context) {
+            tokens.push_back(event.token);
+            if (event.token == 1) {
+                EXPECT_TRUE(context.cancel(cancelled));
+            }
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -152,10 +158,11 @@ TEST(SimulationTest, CancelledHeapEntriesAreNotReportedAsPendingAfterStop) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
     const EventId cancelled = simulation.schedule(no_op_at(200, 2));
-    auto dispatcher = [cancelled](const NoOpEvent&, SimulationContext& context) {
-        EXPECT_TRUE(context.cancel(cancelled));
-        context.stop(StopReason::Requested);
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[cancelled](const NoOpEvent&, SimulationContext& context) {
+            EXPECT_TRUE(context.cancel(cancelled));
+            context.stop(StopReason::Requested);
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -169,10 +176,11 @@ TEST(SimulationTest, StopFinishesCurrentHandlerAndLeavesPendingEvents) {
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
     static_cast<void>(simulation.schedule(no_op_at(200, 2)));
     std::vector<std::uint64_t> tokens;
-    auto dispatcher = [&tokens](const NoOpEvent& event, SimulationContext& context) {
-        tokens.push_back(event.token);
-        context.stop(StopReason::Requested);
-    };
+    auto dispatcher = nexuslab::test::NoOpDispatcher{
+        [&tokens](const NoOpEvent& event, SimulationContext& context) {
+            tokens.push_back(event.token);
+            context.stop(StopReason::Requested);
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -187,9 +195,8 @@ TEST(SimulationTest, StopFinishesCurrentHandlerAndLeavesPendingEvents) {
 TEST(SimulationTest, HandlerFailureProducesFailedResult) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {
-        throw std::runtime_error{"handler failed"};
-    };
+    auto dispatcher = nexuslab::test::NoOpDispatcher{
+        [](const NoOpEvent&, SimulationContext&) { throw std::runtime_error{"handler failed"}; }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -207,10 +214,11 @@ TEST(SimulationTest, SeededRandomDrawsAreRepeatable) {
         Simulation simulation{42};
         static_cast<void>(simulation.schedule(no_op_at(100, 1)));
         static_cast<void>(simulation.schedule(no_op_at(200, 2)));
-        auto dispatcher = [&draws](const NoOpEvent&, SimulationContext& context) {
-            draws.push_back(context.random_u64());
-            draws.push_back(context.random_below(10));
-        };
+        auto dispatcher =
+            nexuslab::test::NoOpDispatcher{[&draws](const NoOpEvent&, SimulationContext& context) {
+                draws.push_back(context.random_u64());
+                draws.push_back(context.random_below(10));
+            }};
         return simulation.run(dispatcher);
     };
 
@@ -224,7 +232,7 @@ TEST(SimulationTest, SeededRandomDrawsAreRepeatable) {
 
 TEST(SimulationTest, FinishedSimulationRejectsReuse) {
     Simulation simulation{42};
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {};
+    auto dispatcher = nexuslab::test::NoOpDispatcher{[](const NoOpEvent&, SimulationContext&) {}};
     const SimulationResult result = simulation.run(dispatcher);
     const bool rerun_rejected = throws_logic_error(
         [&simulation, &dispatcher] { static_cast<void>(simulation.run(dispatcher)); });

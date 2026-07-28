@@ -78,8 +78,15 @@ EventPayloadKind payload_kind(const EventPayload& payload) {
     return std::visit(
         [](const auto& value) {
             using Payload = std::remove_cvref_t<decltype(value)>;
-            static_assert(std::is_same_v<Payload, NoOpEvent>, "event payload kind is not mapped");
-            return EventPayloadKind::NoOp;
+            if constexpr (std::is_same_v<Payload, NoOpEvent>) {
+                return EventPayloadKind::NoOp;
+            } else if constexpr (std::is_same_v<Payload, transport::ChunkArrivalEvent>) {
+                return EventPayloadKind::ChunkArrival;
+            } else {
+                static_assert(std::is_same_v<Payload, transport::TransmissionCompleteEvent>,
+                              "event payload kind is not mapped");
+                return EventPayloadKind::TransmissionComplete;
+            }
         },
         payload);
 }

@@ -3,6 +3,7 @@
 
 #include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/sim/trace.hpp"
+#include "support/noop_dispatcher.hpp"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -56,7 +57,7 @@ TEST(TraceLogTest, DisabledLogStoresNothingAndHasNoHash) {
 TEST(SimulationTraceTest, RecordsScheduleDispatchAndCompletion) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {};
+    auto dispatcher = nexuslab::test::NoOpDispatcher{[](const NoOpEvent&, SimulationContext&) {}};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -76,10 +77,11 @@ TEST(SimulationTraceTest, RecordsCancellationAndStopWithEventMetadata) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
     const EventId cancelled = simulation.schedule(no_op_at(200, 2));
-    auto dispatcher = [cancelled](const NoOpEvent&, SimulationContext& context) {
-        static_cast<void>(context.cancel(cancelled));
-        context.stop(StopReason::Requested);
-    };
+    auto dispatcher =
+        nexuslab::test::NoOpDispatcher{[cancelled](const NoOpEvent&, SimulationContext& context) {
+            static_cast<void>(context.cancel(cancelled));
+            context.stop(StopReason::Requested);
+        }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -98,9 +100,8 @@ TEST(SimulationTraceTest, RecordsCancellationAndStopWithEventMetadata) {
 TEST(SimulationTraceTest, RecordsFailureDetailsAndCurrentEvent) {
     Simulation simulation{42};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {
-        throw std::runtime_error{"handler failed"};
-    };
+    auto dispatcher = nexuslab::test::NoOpDispatcher{
+        [](const NoOpEvent&, SimulationContext&) { throw std::runtime_error{"handler failed"}; }};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -115,7 +116,7 @@ TEST(SimulationTraceTest, RecordsFailureDetailsAndCurrentEvent) {
 TEST(SimulationTraceTest, CanDisableTracingForBenchmarks) {
     Simulation simulation{42, TraceMode::Disabled};
     static_cast<void>(simulation.schedule(no_op_at(100, 1)));
-    auto dispatcher = [](const NoOpEvent&, SimulationContext&) {};
+    auto dispatcher = nexuslab::test::NoOpDispatcher{[](const NoOpEvent&, SimulationContext&) {}};
 
     const SimulationResult result = simulation.run(dispatcher);
 
@@ -129,13 +130,14 @@ TEST(SimulationTraceTest, TenIdenticalSeededRunsProduceTheSameHash) {
     for (std::uint64_t run = 0; run < 10; ++run) {
         Simulation simulation{42};
         static_cast<void>(simulation.schedule(no_op_at(1, 0)));
-        auto dispatcher = [](const NoOpEvent& event, SimulationContext& context) {
-            if (event.token < 4) {
-                const std::uint64_t delay = context.random_below(10) + 1;
-                static_cast<void>(
-                    context.schedule(no_op_at(context.now().count() + delay, event.token + 1)));
-            }
-        };
+        auto dispatcher =
+            nexuslab::test::NoOpDispatcher{[](const NoOpEvent& event, SimulationContext& context) {
+                if (event.token < 4) {
+                    const std::uint64_t delay = context.random_below(10) + 1;
+                    static_cast<void>(
+                        context.schedule(no_op_at(context.now().count() + delay, event.token + 1)));
+                }
+            }};
 
         const SimulationResult result = simulation.run(dispatcher);
 

@@ -29,6 +29,8 @@ enum class TraceAction : std::uint8_t {
 
 enum class EventPayloadKind : std::uint8_t {
     NoOp = 1,
+    ChunkArrival = 2,
+    TransmissionComplete = 3,
 };
 
 enum class StopReason : std::uint8_t {
