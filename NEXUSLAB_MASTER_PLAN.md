@@ -1483,6 +1483,9 @@ Review policy boundaries, observability, and snapshot cost before adding advance
 
 # Cluster 5 — Training Workload Engine
 
+**Status: Complete — 2026-09-05.** [Gate 5](docs/architecture-gates/cluster-5.md) approves
+the synthetic lifecycle, explicit assignments, overlap model, job metrics and scenario schema.
+
 ## Objective
 
 Generate realistic-enough distributed-training behavior from synthetic job profiles.
@@ -1588,6 +1591,9 @@ Confirm that the workload abstraction reflects job completion and GPU idle time,
 ---
 
 # Cluster 6 — Collective Communication Engine
+
+**Status: Complete — 2026-09-05.** [Gate 6](docs/architecture-gates/cluster-6.md) approves
+the round-barrier Ring planner, local/fabric execution and workload integration.
 
 ## Objective
 
@@ -2915,6 +2921,10 @@ Demo:
 
 ## Milestone 4 — Training Workload MVP
 
+**Status: Complete — 2026-09-05.** Run `nexuslab train --file
+examples/training/two-worker.yaml --timeline` after building. Both Clusters 5 and 6 are included;
+[scenario documentation](docs/training-scenarios.md) defines the synthetic assumptions and limits.
+
 Includes:
 
 - Clusters 5 and 6;
@@ -3474,8 +3484,8 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | 2 | Topology and Cluster Model | Complete | Yes |
 | 3 | Link, Queue, and Transfer Model | Complete | Yes |
 | 4 | Routing Policy Framework | Complete | Yes |
-| 5 | Training Workload Engine | Not Started | No |
-| 6 | Collective Communication Engine | Not Started | No |
+| 5 | Training Workload Engine | Complete | Yes |
+| 6 | Collective Communication Engine | Complete | Yes |
 | 7 | Scheduler and GPU Placement | Not Started | No |
 | 8 | Telemetry and Observability | Not Started | No |
 | 9 | Failure Injection and Recovery | Not Started | No |

@@ -114,3 +114,6 @@ jobs:
 
       - name: Run routing comparison smoke test
         run: bash scripts/benchmark-routing.sh --flows 100
+
+      - name: Run training workload smoke test
+        run: bash scripts/benchmark-training.sh --workers 2 --steps 1

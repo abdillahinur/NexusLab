@@ -8,7 +8,9 @@
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/topology/summary.hpp"
 #include "nexuslab/version.hpp"
+#include "nexuslab/workload/run.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <memory>
 #include <ostream>
@@ -23,6 +25,8 @@ void print_usage(std::ostream& output) {
     output << "Usage:\n"
               "  nexuslab --help\n"
               "  nexuslab --version\n"
+              "  nexuslab train --profiles\n"
+              "  nexuslab train --file <scenario.yaml> [--timeline]\n"
               "  nexuslab topology summary --clos <initial|stretch>\n"
               "  nexuslab topology summary --file <topology.yaml>\n";
 }
@@ -39,6 +43,20 @@ void print_usage(std::ostream& output) {
         throw std::runtime_error{"cannot read topology file: " + std::string{path}};
     }
     return contents.str();
+}
+
+[[nodiscard]] std::string read_training_file(std::string_view path) {
+    std::ifstream input{std::string{path}, std::ios::binary | std::ios::ate};
+    if (!input || input.tellg() < 0 || input.tellg() > 1'048'576) {
+        throw std::invalid_argument{"training file is unreadable or exceeds one MiB"};
+    }
+    std::string yaml(static_cast<std::size_t>(input.tellg()), '\0');
+    input.seekg(0);
+    input.read(yaml.data(), static_cast<std::streamsize>(yaml.size()));
+    if (!input || input.peek() != std::char_traits<char>::eof()) {
+        throw std::runtime_error{"training file changed while reading"};
+    }
+    return yaml;
 }
 
 [[nodiscard]] std::unique_ptr<topology::TopologyGraph> load_clos_profile(std::string_view profile) {
@@ -85,6 +103,28 @@ int run(std::span<const std::string_view> arguments, std::ostream& output, std::
             print_usage(output);
             return 0;
         }
+    }
+
+    if (arguments.size() == 2U && arguments[0] == "train" && arguments[1] == "--profiles") {
+        for (const auto& profile : workload::profiles()) {
+            output << profile.name << ": " << profile.assumption << '\n';
+        }
+        return 0;
+    }
+    if ((arguments.size() == 3U || arguments.size() == 4U) && arguments[0] == "train" &&
+        arguments[1] == "--file") {
+        if (arguments.size() == 4U && arguments[3] != "--timeline") {
+            print_usage(error);
+            return 2;
+        }
+        const auto yaml = read_training_file(arguments[2]);
+        const auto report = workload::run_training(workload::parse_scenario(yaml));
+        workload::write_report(report, output, arguments.size() == 4U);
+        return std::any_of(
+                   report.jobs.begin(), report.jobs.end(),
+                   [](const auto& job) { return job.state != workload::JobState::Succeeded; })
+                   ? 1
+                   : 0;
     }
 
     if (arguments.size() >= 2U && arguments[0] == "topology" && arguments[1] == "summary") {

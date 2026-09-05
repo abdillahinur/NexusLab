@@ -3,9 +3,11 @@
 
 #pragma once
 
+#include "nexuslab/collective/model.hpp"
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/sim/time.hpp"
 #include "nexuslab/transport/events.hpp"
+#include "nexuslab/workload/events.hpp"
 
 #include <compare>
 #include <cstdint>
@@ -30,7 +32,8 @@ struct NoOpEvent final {
 using EventPayload =
     std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent,
                  transport::LinkStateChangeEvent, transport::PortStateChangeEvent,
-                 transport::SwitchStateChangeEvent>;
+                 transport::SwitchStateChangeEvent, workload::WorkloadEvent,
+                 collective::LocalCompletionEvent>;
 
 struct EventSpec final {
     SimTimeNs timestamp;

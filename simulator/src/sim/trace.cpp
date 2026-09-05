@@ -88,10 +88,14 @@ EventPayloadKind payload_kind(const EventPayload& payload) {
                 return EventPayloadKind::LinkStateChange;
             } else if constexpr (std::is_same_v<Payload, transport::PortStateChangeEvent>) {
                 return EventPayloadKind::PortStateChange;
-            } else {
-                static_assert(std::is_same_v<Payload, transport::SwitchStateChangeEvent>,
-                              "event payload kind is not mapped");
+            } else if constexpr (std::is_same_v<Payload, transport::SwitchStateChangeEvent>) {
                 return EventPayloadKind::SwitchStateChange;
+            } else if constexpr (std::is_same_v<Payload, workload::WorkloadEvent>) {
+                return EventPayloadKind::Workload;
+            } else {
+                static_assert(std::is_same_v<Payload, collective::LocalCompletionEvent>,
+                              "event payload kind is not mapped");
+                return EventPayloadKind::LocalCollectiveCompletion;
             }
         },
         payload);

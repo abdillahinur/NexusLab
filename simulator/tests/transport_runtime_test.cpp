@@ -132,6 +132,14 @@ class RuntimeDispatcher final {
     void operator()(const SwitchStateChangeEvent& event, sim::SimulationContext& context) {
         runtime_->handle_switch_state_change(event, context);
     }
+    void operator()(const nexuslab::workload::WorkloadEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected workload event in this dispatcher"};
+    }
+    void operator()(const nexuslab::collective::LocalCompletionEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected collective event in this dispatcher"};
+    }
 
     [[nodiscard]] const std::vector<std::pair<ChunkId, sim::SimTimeNs>>&
     deliveries() const noexcept {

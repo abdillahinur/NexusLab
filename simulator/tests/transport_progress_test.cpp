@@ -114,6 +114,14 @@ class ProgressDispatcher final {
         runtime_.handle_switch_state_change(event, context);
         inspect();
     }
+    void operator()(const nexuslab::workload::WorkloadEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected workload event in this dispatcher"};
+    }
+    void operator()(const nexuslab::collective::LocalCompletionEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected collective event in this dispatcher"};
+    }
 
   private:
     void inspect() const {

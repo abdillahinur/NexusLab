@@ -8,10 +8,11 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab has completed Clusters 0–4, including Milestone 3 — Routing Comparison.
-> Synthetic transfers can use shortest-path, ECMP, least-loaded, or queue-aware routing with
-> inspectable decisions and deterministic failure-aware path selection. Training workloads remain
-> future work. Measurements describe this simulator on the documented host, not hardware fidelity.
+> NexusLab has completed Clusters 0–6, including Milestone 4 — Training Workload MVP.
+> Versioned synthetic scenarios now run multi-GPU jobs through compute, Ring AllReduce, and step
+> barriers, with optional bucket overlap, stragglers, cancellation, and GPU idle-time metrics.
+> Explicit assignments are supported; automatic placement/scheduling remains future work.
+> Measurements describe this simulator on the documented host, not real-hardware fidelity.
 
 ## Current foundation
 
@@ -30,7 +31,9 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 - chunk-level fabric transfers with FIFO service, finite buffers, marking, and per-link counters;
 - transfer progress, exactly-once final outcomes, and link/port/switch failure reconciliation;
 - configuration-selected routing policies, bounded operational path caching, and decision records;
-- simulation-core, topology, transport, and routing comparison benchmark harnesses.
+- synthetic training jobs, explicit GPU assignments, bucket overlap, and job completion/idle metrics;
+- Ring AllReduce with reduce-scatter/all-gather rounds and distinct local/fabric communication;
+- versioned training scenarios, phase timelines, and workload/collective benchmarks.
 
 The [Cluster 3 gate](docs/architecture-gates/cluster-3.md) records completion evidence.
 To transfer synthetic data across a generated 512-GPU Clos and observe queue buildup:
@@ -41,8 +44,7 @@ bash scripts/benchmark-transport.sh --pattern incast --flows 100
 
 The output includes delivered/dropped bytes, successful/failed transfers, maximum waiting bytes,
 serializer busy time, event count, and peak RSS. Run `bash scripts/benchmark-transport-suite.sh`
-for the three-repeat scale and chunk-size matrix. These fixed-path benchmark harnesses are the
-Milestone 2 demo; a scenario-driven workload CLI belongs to later milestones.
+for the three-repeat scale and chunk-size matrix. These fixed-path benchmark harnesses remain the Milestone 2 demo.
 
 The [Cluster 4 gate](docs/architecture-gates/cluster-4.md) records routing correctness and
 comparison evidence. Compare the same synthetic traffic across policies:
@@ -58,6 +60,21 @@ p50/p95 latency, queue occupancy, decision/outcome digests, cache counters, wall
 Use `--mode lookup --gpus 2048 --flows 10000` for cold/warm path and policy selection measurements,
 or `bash scripts/benchmark-routing-suite.sh` for the complete three-repeat matrix.
 Routing occurs once at transfer admission; existing transfers retain their paths and do not retry.
+
+Run a complete training job and inspect compute/communication phases:
+
+```bash
+bash scripts/build.sh release
+build/release/simulator/nexuslab train --file examples/training/two-worker.yaml --timeline
+build/release/simulator/nexuslab train --file examples/training/overlap-straggler.yaml --timeline
+```
+
+[Scenario documentation](docs/training-scenarios.md) explains profiles, explicit local/fabric
+parameters, failure behavior and metric definitions. [Gate 5](docs/architecture-gates/cluster-5.md)
+and [Gate 6](docs/architecture-gates/cluster-6.md) record workload and collective validation.
+Run `bash scripts/benchmark-training-suite.sh` for the three-repeat worker, planning, overlap,
+chunk-size, concurrent-job and loss matrix. GPU assignment conflicts fail explicitly; a scheduler
+will be introduced in Cluster 7.
 
 Dependency commits are pinned in `cmake/NexusLabDependencies.cmake`.
 

@@ -11,6 +11,17 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Milestone 4 completion with Cluster 5 workload and Cluster 6 collective architecture gates.
+- Explicit training job/GPU assignments, step/bucket synchronization, optional compute overlap,
+  per-worker stragglers, cancellation/failure and elapsed/compute/idle GPU metrics.
+- Pure bounded Ring AllReduce round planning with uneven shards and checked logical volume.
+- Round-barrier collective execution through routing/transport and explicit same-NIC local timing.
+- Linked job/collective timelines, typed workload/local events and exclusive outcome forwarding.
+- Strict versioned training YAML, seven labeled synthetic parameter profiles, example scenarios,
+  and a `train` CLI with failure exit status and optional phase timeline.
+- Analytical timing, symbolic reduction coverage, failure, cancellation, limit and reproducibility tests.
+- Repeatable workload/collective benchmarks and CI smoke coverage.
+
 - Cluster 4 routing-policy framework and Milestone 3 Routing Comparison completion.
 - Bounded operational shortest-path enumeration and FIFO pair caching with revision invalidation.
 - Extensible configuration-selected shortest-path, stable ECMP, least-loaded, and queue-aware policies.

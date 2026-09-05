@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved architecture through Cluster 4. Subsystem details will
+This document describes the gate-approved architecture through Cluster 6. Subsystem details will
 be added as their implementation clusters reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
@@ -159,6 +159,47 @@ Host policy execution time is measured outside deterministic decision records.
 
 See [ADR-007](docs/adr/ADR-007-routing-policy-boundary.md) for alternatives, exact scoring and
 bounds, and [Architecture Gate 4](docs/architecture-gates/cluster-4.md) for tests and measurements.
+
+## Cluster 5 training workloads
+
+`WorkloadEngine` schedules typed arrival/compute/control events for explicit ordered GPU
+assignments. Each job has checked step/bucket dimensions, per-worker compute durations, arrival,
+priority metadata and AllReduce parameters. Disjoint jobs run concurrently; assignment conflicts
+fail without a hidden scheduling policy. Compute-to-bucket readiness supports an optional overlap
+model; ordered bucket collectives and a step barrier determine the job critical path. Stragglers
+come from worker-specific compute durations.
+
+The engine depends on `CollectiveExecutor`, not a concrete ring planner. Job metrics distinguish
+elapsed, allocated compute and idle GPU time, including partial intervals on cancellation/failure.
+Timeline records link job/step/bucket transitions to collective IDs. Job failure cancels future
+compute and stops future collective rounds; already-issued communication drains independently.
+A job can finish before the simulation's final network-drain timestamp.
+
+Strict versioned YAML scenarios and named synthetic parameter templates feed the `train` CLI.
+Worker failure is a job-scoped abort, priority is metadata, and no scheduler or hardware-calibrated
+compute/memory model is implied. [ADR-008](docs/adr/ADR-008-training-workload-lifecycle.md),
+[Gate 5](docs/architecture-gates/cluster-5.md), and the [scenario guide](docs/training-scenarios.md)
+record semantics and input/state limits.
+
+## Cluster 6 collective execution
+
+The pure Ring planner emits one round at a time: P−1 reduce-scatter rounds followed by P−1
+all-gather rounds, with quotient/remainder shards. A global round barrier waits for all nonempty
+transfers. The total successful logical volume is exactly `2(P−1)×gradient_bytes`; one participant
+needs no communication. Tensor values and reduction arithmetic are not executed or timed.
+
+`RingExecutor` maps GPUs to NICs and sends remote work through the existing Router and chunked
+transport. Same-NIC work uses explicitly configured independent local transfer timing. Local and
+fabric volumes remain distinct. Failed/no-route work stops later rounds; issued transfers drain
+before the collective publishes one final outcome. Rank order comes from the caller; the planner
+contains no routing policy. Pipelined channels, topology-aware rank ordering and shared local-bus
+contention remain explicit deferrals.
+
+`TrainingDispatcher` composes workload, collective and transport handlers and exclusively forwards
+transport outcomes to their owner, then collective outcomes to the job engine. Unknown ownership
+is an error. Workload and local-completion event kinds have stable trace codes; the event envelope
+remains bounded. [ADR-009](docs/adr/ADR-009-ring-allreduce-execution.md) and
+[Gate 6](docs/architecture-gates/cluster-6.md) record the execution boundary and measured costs.
 
 ## Policy boundaries
 

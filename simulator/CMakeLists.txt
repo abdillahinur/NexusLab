@@ -11,6 +11,13 @@ add_library(
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
     src/transport/runtime.cpp
+    src/workload/run.cpp
+    src/workload/scenario.cpp
+    src/workload/model.cpp
+    src/workload/engine.cpp
+    src/workload/metrics.cpp
+    src/collective/planner.cpp
+    src/collective/runtime.cpp
     src/routing/paths.cpp
     src/routing/policy.cpp
     src/routing/router.cpp
@@ -57,6 +64,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp
         tests/transport_runtime_test.cpp
+        tests/training_test.cpp
         tests/routing_test.cpp
         tests/transport_progress_test.cpp
         tests/topology_clos_test.cpp
@@ -85,6 +93,8 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(nexuslab_tests)
 
+    add_test(NAME nexuslab_cli_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --timeline)
+    set_tests_properties(nexuslab_cli_training PROPERTIES PASS_REGULAR_EXPRESSION "state=succeeded")
     add_test(NAME nexuslab_cli_version COMMAND nexuslab --version)
     set_tests_properties(nexuslab_cli_version PROPERTIES PASS_REGULAR_EXPRESSION "NexusLab 0.1.0")
     add_test(NAME nexuslab_cli_initial_topology COMMAND nexuslab topology summary --clos initial)
@@ -105,6 +115,13 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
 endif()
 
 if(NEXUSLAB_BUILD_BENCHMARKS)
+    add_executable(nexuslab_training_benchmarks benchmarks/training_benchmark.cpp)
+    target_link_libraries(nexuslab_training_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
+    nexuslab_enable_clang_tidy(nexuslab_training_benchmarks)
+    if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
+        add_test(NAME nexuslab_training_benchmark_smoke COMMAND nexuslab_training_benchmarks --workers 2 --steps 1)
+        set_tests_properties(nexuslab_training_benchmark_smoke PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=training")
+    endif()
     add_executable(nexuslab_routing_benchmarks benchmarks/routing_benchmark.cpp)
     target_link_libraries(nexuslab_routing_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
     nexuslab_enable_clang_tidy(nexuslab_routing_benchmarks)

@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 64
+jobs:
+  - name: overlap-with-straggler
+    workers: [0, 8]
+    compute_ns: [20000, 40000]
+    gradient_bytes: 65536
+    bucket_bytes: 16384
+    steps: 3
+    overlap: true
+  - name: staggered-independent-job
+    workers: [16, 24]
+    arrival_ns: 10000
+    compute_ns: 15000
+    steps: 2

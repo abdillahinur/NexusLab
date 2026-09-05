@@ -1,0 +1,23 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 64
+seed: 42
+routing_policy: ecmp
+bandwidth_bps: 100000000000
+propagation_ns: 500
+buffer_bytes: 262144
+local_bandwidth_bps: 800000000000
+local_latency_ns: 0
+jobs:
+  - name: two-worker-training
+    profile: small-data-parallel
+    workers: [0, 8]
+    steps: 3
+    compute_ns: 10000
+    gradient_bytes: 65536
+    bucket_bytes: 65536
+    chunk_bytes: 4096
+    overlap: false
+    collective: allreduce
+    algorithm: ring

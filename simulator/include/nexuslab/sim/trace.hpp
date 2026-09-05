@@ -34,6 +34,8 @@ enum class EventPayloadKind : std::uint8_t {
     LinkStateChange = 4,
     PortStateChange = 5,
     SwitchStateChange = 6,
+    Workload = 7,
+    LocalCollectiveCompletion = 8,
 };
 
 enum class StopReason : std::uint8_t {

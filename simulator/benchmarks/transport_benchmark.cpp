@@ -150,6 +150,14 @@ class Dispatcher final {
     void operator()(const transport::SwitchStateChangeEvent& e, sim::SimulationContext& c) {
         runtime_.handle_switch_state_change(e, c);
     }
+    void operator()(const nexuslab::workload::WorkloadEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected workload event in this dispatcher"};
+    }
+    void operator()(const nexuslab::collective::LocalCompletionEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected collective event in this dispatcher"};
+    }
 
   private:
     transport::TransportRuntime& runtime_;
