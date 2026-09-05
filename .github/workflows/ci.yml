@@ -117,3 +117,6 @@ jobs:
 
       - name: Run training workload smoke test
         run: bash scripts/benchmark-training.sh --workers 2 --steps 1
+
+      - name: Run scheduling comparison smoke test
+        run: bash scripts/benchmark-scheduling.sh --case burst

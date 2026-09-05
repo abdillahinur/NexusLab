@@ -8,10 +8,11 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab has completed Clusters 0–6, including Milestone 4 — Training Workload MVP.
+> NexusLab has completed Clusters 0–7, including Milestone 5 — Multi-Tenant Cluster.
 > Versioned synthetic scenarios now run multi-GPU jobs through compute, Ring AllReduce, and step
 > barriers, with optional bucket overlap, stragglers, cancellation, and GPU idle-time metrics.
-> Explicit assignments are supported; automatic placement/scheduling remains future work.
+> Automatic placement supports first-fit, seeded random, rack-local and compact policies, with
+> priority queues, GPU failure/recovery, and separate scheduling-wait metrics.
 > Measurements describe this simulator on the documented host, not real-hardware fidelity.
 
 ## Current foundation
@@ -33,7 +34,8 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 - configuration-selected routing policies, bounded operational path caching, and decision records;
 - synthetic training jobs, explicit GPU assignments, bucket overlap, and job completion/idle metrics;
 - Ring AllReduce with reduce-scatter/all-gather rounds and distinct local/fabric communication;
-- versioned training scenarios, phase timelines, and workload/collective benchmarks.
+- versioned training scenarios, phase timelines, and workload/collective benchmarks;
+- non-preemptive admission, bounded GPU inventory, placement comparisons and decision traces.
 
 The [Cluster 3 gate](docs/architecture-gates/cluster-3.md) records completion evidence.
 To transfer synthetic data across a generated 512-GPU Clos and observe queue buildup:
@@ -191,3 +193,15 @@ NexusLab results will be explicitly labeled as simulated and synthetic. Comparat
 Copyright 2026 NexusLab contributors.
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for the complete, unmodified license text.
+
+## Scheduling comparison
+
+```bash
+build/release/simulator/nexuslab train --file examples/training/scheduled.yaml --timeline
+bash scripts/benchmark-scheduling.sh --policy compact --case rack-pressure
+bash scripts/benchmark-scheduling-suite.sh
+```
+
+The [scheduling guide](docs/scheduling.md) explains policies, priorities, backfill and failure semantics.
+[Gate 7](docs/architecture-gates/cluster-7.md) and the
+[comparison baseline](docs/benchmarks/cluster-7-scheduling-baseline.md) record validation and measured results.

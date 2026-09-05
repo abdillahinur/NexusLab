@@ -50,6 +50,7 @@ class TrainingDispatcher final {
             collectives_.handle(completion, context);
         }
         for (;;) {
+            jobs_.dispatch_waiting(context);
             const auto completed = collectives_.take_completed();
             if (completed.empty()) {
                 break;

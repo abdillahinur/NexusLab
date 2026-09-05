@@ -176,8 +176,8 @@ compute and stops future collective rounds; already-issued communication drains 
 A job can finish before the simulation's final network-drain timestamp.
 
 Strict versioned YAML scenarios and named synthetic parameter templates feed the `train` CLI.
-Worker failure is a job-scoped abort, priority is metadata, and no scheduler or hardware-calibrated
-compute/memory model is implied. [ADR-008](docs/adr/ADR-008-training-workload-lifecycle.md),
+In explicit-assignment mode, worker failure is a job-scoped abort and priority is metadata.
+Cluster 7 optionally supplies scheduling; no hardware-calibrated compute/memory model is implied. [ADR-008](docs/adr/ADR-008-training-workload-lifecycle.md),
 [Gate 5](docs/architecture-gates/cluster-5.md), and the [scenario guide](docs/training-scenarios.md)
 record semantics and input/state limits.
 
@@ -200,6 +200,22 @@ transport outcomes to their owner, then collective outcomes to the job engine. U
 is an error. Workload and local-completion event kinds have stable trace codes; the event envelope
 remains bounded. [ADR-009](docs/adr/ADR-009-ring-allreduce-execution.md) and
 [Gate 6](docs/architecture-gates/cluster-6.md) record the execution boundary and measured costs.
+
+## Cluster 7 admission and placement
+
+Optional scheduling adds a bounded resource inventory and read-only SchedulingPolicy interface.
+The workload engine owns waiting/admitted lifecycle transitions; inventory atomically validates
+allocations. Placement selects GPU/rank order, while Router independently selects fabric paths.
+Arrival, release and GPU health events trigger deterministic priority/arrival/ID queue passes with
+non-reserving backfill. First-fit, seeded random, rack-local and compact policies expose decisions.
+Persistent GPU down/up aborts owners and excludes failed resources until recovery. Job-scoped
+worker failures retain the Cluster 5 behavior. Scheduling is opt-in, preserving explicit legacy runs.
+
+Job snapshots separate arrival-to-allocation wait from allocated compute/idle. Queue exhaustion can
+leave explicit waiting results. Decision records include locality and free-rack fragmentation;
+retention limits bound both decision count and cumulative allocation IDs. Policies receive a borrowed
+span, never a graph/runtime copy. See [ADR-010](docs/adr/ADR-010-scheduler-placement-boundary.md),
+[Gate 7](docs/architecture-gates/cluster-7.md), and [scheduling guide](docs/scheduling.md).
 
 ## Policy boundaries
 

@@ -16,13 +16,15 @@ enum class JobState : std::uint8_t {
     Communicating = 4,
     Succeeded = 5,
     Failed = 6,
-    Cancelled = 7
+    Cancelled = 7,
+    Waiting = 8
 };
 enum class CollectiveKind : std::uint8_t { AllReduce = 1 };
 enum class CollectiveAlgorithm : std::uint8_t { Ring = 1 };
 struct JobSpec final {
     std::string name;
     std::vector<topology::GpuId> workers;
+    std::uint32_t requested_workers{0};
     std::vector<sim::SimDurationNs> compute;
     sim::SimTimeNs arrival;
     std::uint32_t steps{1};
@@ -55,6 +57,8 @@ struct JobSnapshot final {
     std::uint64_t idle_gpu_ns;
     std::uint64_t elapsed_ns;
     std::string reason;
+    std::optional<sim::SimTimeNs> allocated_at;
+    std::uint64_t waiting_ns{0};
     bool operator==(const JobSnapshot&) const = default;
 };
 struct JobTimeline final {

@@ -1680,6 +1680,9 @@ Approve separation of collective planning, routing, and transfer execution.
 
 # Cluster 7 — Scheduler and GPU Placement
 
+**Status: Complete — 2026-09-05.** [Gate 7](docs/architecture-gates/cluster-7.md) approves
+non-preemptive scheduling, four placement policies, persistent GPU health and waiting/locality metrics.
+
 ## Objective
 
 Assign jobs to GPU workers and measure the impact of placement.
@@ -2939,6 +2942,9 @@ Demo:
 
 ## Milestone 5 — Multi-Tenant Cluster
 
+**Status: Complete — 2026-09-05.** Run `train --file examples/training/scheduled.yaml --timeline`
+or `bash scripts/benchmark-scheduling-suite.sh` to compare all four placement policies.
+
 Includes:
 
 - Cluster 7;
@@ -3486,7 +3492,7 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | 4 | Routing Policy Framework | Complete | Yes |
 | 5 | Training Workload Engine | Complete | Yes |
 | 6 | Collective Communication Engine | Complete | Yes |
-| 7 | Scheduler and GPU Placement | Not Started | No |
+| 7 | Scheduler and GPU Placement | Complete | Yes |
 | 8 | Telemetry and Observability | Not Started | No |
 | 9 | Failure Injection and Recovery | Not Started | No |
 | 10 | Congestion-Control Framework | Not Started | No |

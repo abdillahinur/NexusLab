@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/collective/runtime.hpp"
+#include "nexuslab/scheduling/policy.hpp"
 #include "nexuslab/workload/model.hpp"
 #include <string_view>
 namespace nexuslab::workload {
@@ -19,6 +20,11 @@ struct JobControl final {
     sim::SimTimeNs timestamp;
     std::uint32_t worker{0};
 };
+struct GpuControl final {
+    topology::GpuId gpu;
+    bool healthy;
+    sim::SimTimeNs timestamp;
+};
 struct TrainingScenario final {
     std::size_t gpus{64};
     std::uint64_t seed{42};
@@ -29,6 +35,8 @@ struct TrainingScenario final {
     collective::CollectiveConfiguration local{};
     std::vector<JobSpec> jobs;
     std::vector<JobControl> controls;
+    std::optional<scheduling::Configuration> scheduling;
+    std::vector<GpuControl> gpu_controls;
 };
 [[nodiscard]] std::vector<Profile> profiles();
 [[nodiscard]] TrainingScenario parse_scenario(std::string_view yaml);

@@ -10,7 +10,9 @@ enum class WorkloadEventKind : std::uint8_t {
     Arrival = 1,
     ComputeReady = 2,
     Cancel = 3,
-    WorkerFailure = 4
+    WorkerFailure = 4,
+    GpuDown = 5,
+    GpuUp = 6
 };
 struct WorkloadEvent final {
     JobId job;

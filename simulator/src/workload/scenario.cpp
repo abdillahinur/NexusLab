@@ -65,9 +65,27 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     }
     return static_cast<std::uint32_t>(number_value);
 }
+void read_compute(const YAML::Node& node, sim::SimDurationNs default_compute, JobSpec& result) {
+    const auto workers = node["workers"];
+    const auto requested = result.requested_workers;
+    const auto count = requested != 0 ? static_cast<std::size_t>(requested) : workers.size();
+    const auto compute = node["compute_ns"];
+    if (compute && compute.IsSequence() && compute.size() != count) {
+        throw std::invalid_argument{"compute durations must match workers"};
+    }
+    for (std::size_t index = 0; index < count; ++index) {
+        if (requested == 0) {
+            result.workers.emplace_back(number(workers[index]));
+        }
+        const auto duration = !compute ? default_compute.count()
+                                       : number(compute.IsSequence() ? compute[index] : compute);
+        result.compute.emplace_back(duration);
+    }
+}
 [[nodiscard]] JobSpec job(const YAML::Node& node) {
-    keys(node, {"name", "profile", "workers", "arrival_ns", "steps", "compute_ns", "gradient_bytes",
-                "bucket_bytes", "chunk_bytes", "priority", "overlap", "collective", "algorithm"});
+    keys(node, {"name", "profile", "workers", "requested_workers", "arrival_ns", "steps",
+                "compute_ns", "gradient_bytes", "bucket_bytes", "chunk_bytes", "priority",
+                "overlap", "collective", "algorithm"});
     const auto name = node["profile"] ? node["profile"].as<std::string>() : "small-data-parallel";
     const auto available = profiles();
     const auto found = std::find_if(available.begin(), available.end(),
@@ -80,10 +98,14 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
         throw std::invalid_argument{"unsupported collective or algorithm"};
     }
     const auto workers = node["workers"];
-    if (!workers.IsSequence() || workers.size() == 0 || workers.size() > 8192) {
+    const auto requested = value(node, "requested_workers", 0);
+    if ((node["requested_workers"] && (workers || requested == 0)) || requested > 8192 ||
+        (requested == 0 &&
+         (!workers.IsSequence() || workers.size() == 0 || workers.size() > 8192))) {
         throw std::invalid_argument{"invalid worker list"};
     }
     JobSpec result;
+    result.requested_workers = narrow(requested);
     result.name = node["name"] ? node["name"].as<std::string>() : name;
     if (result.name.size() > 256) {
         throw std::length_error{"job name exceeds 256 bytes"};
@@ -102,16 +124,7 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
         }
         result.overlap = flag == "true";
     }
-    const auto compute = node["compute_ns"];
-    if (compute && compute.IsSequence() && compute.size() != workers.size()) {
-        throw std::invalid_argument{"compute durations must match workers"};
-    }
-    for (std::size_t index = 0; index < workers.size(); ++index) {
-        result.workers.emplace_back(number(workers[index]));
-        const auto duration = !compute ? found->compute.count()
-                                       : number(compute.IsSequence() ? compute[index] : compute);
-        result.compute.emplace_back(duration);
-    }
+    read_compute(node, found->compute, result);
     return result;
 }
 [[nodiscard]] std::vector<JobControl> read_controls(const YAML::Node& controls,
@@ -139,6 +152,27 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     }
     return result;
 }
+std::vector<GpuControl> read_gpu_controls(const YAML::Node& controls, std::size_t gpus,
+                                          bool scheduling) {
+    std::vector<GpuControl> result;
+    if (!controls) {
+        return result;
+    }
+    if (!scheduling || !controls.IsSequence() || controls.size() > 10'000) {
+        throw std::invalid_argument{"GPU controls require scheduler and bounded list"};
+    }
+    for (const auto& control : controls) {
+        keys(control, {"gpu", "state", "at_ns"});
+        const auto gpu = number(control["gpu"]);
+        const auto state = control["state"].as<std::string>();
+        if (gpu >= gpus || (state != "up" && state != "down")) {
+            throw std::invalid_argument{"invalid GPU control"};
+        }
+        result.push_back(
+            {topology::GpuId{gpu}, state == "up", sim::SimTimeNs{number(control["at_ns"])}});
+    }
+    return result;
+}
 } // namespace
 TrainingScenario parse_scenario(std::string_view yaml) {
     if (yaml.size() > 1'048'576) {
@@ -146,7 +180,8 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     }
     const auto root = YAML::Load(std::string{yaml});
     keys(root, {"version", "gpus", "seed", "routing_policy", "bandwidth_bps", "propagation_ns",
-                "buffer_bytes", "local_bandwidth_bps", "local_latency_ns", "jobs", "controls"});
+                "buffer_bytes", "scheduling_policy", "gpu_controls", "local_bandwidth_bps",
+                "local_latency_ns", "jobs", "controls"});
     if (number(root["version"]) != 1) {
         throw std::invalid_argument{"unsupported training scenario version"};
     }
@@ -156,6 +191,12 @@ TrainingScenario parse_scenario(std::string_view yaml) {
         throw std::invalid_argument{"unsupported Clos GPU count"};
     }
     result.seed = value(root, "seed", 42);
+    if (root["scheduling_policy"]) {
+        result.scheduling = scheduling::Configuration{};
+        result.scheduling->policy = root["scheduling_policy"].as<std::string>();
+        result.scheduling->seed = result.seed;
+        static_cast<void>(scheduling::make_policy(result.scheduling->policy, result.seed));
+    }
     if (root["routing_policy"]) {
         result.routing_policy = root["routing_policy"].as<std::string>();
     }
@@ -172,13 +213,18 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     std::size_t worker_entries{0};
     for (const auto& entry : jobs) {
         auto specification = job(entry);
-        if (specification.workers.size() > 1'000'000 - worker_entries) {
+        if (specification.compute.size() > 1'000'000 - worker_entries) {
             throw std::length_error{"scenario worker-entry limit exceeded"};
         }
-        worker_entries += specification.workers.size();
+        worker_entries += specification.compute.size();
+        if (specification.requested_workers != 0 && !result.scheduling.has_value()) {
+            throw std::invalid_argument{"requested_workers requires scheduling_policy"};
+        }
         result.jobs.push_back(std::move(specification));
     }
     result.controls = read_controls(root["controls"], result.jobs.size());
+    result.gpu_controls =
+        read_gpu_controls(root["gpu_controls"], result.gpus, result.scheduling.has_value());
     return result;
 }
 } // namespace nexuslab::workload

@@ -8,8 +8,23 @@
 #include <utility>
 namespace nexuslab::workload {
 WorkloadEngine::WorkloadEngine(const topology::TopologyGraph& graph,
-                               collective::CollectiveExecutor& executor, WorkloadLimits limits)
-    : graph_{&graph}, executor_{&executor}, limits_{limits} {
+                               collective::CollectiveExecutor& executor, WorkloadLimits limits,
+                               std::optional<scheduling::Configuration> scheduling,
+                               std::unique_ptr<scheduling::SchedulingPolicy> policy)
+    : graph_{&graph}, executor_{&executor}, limits_{limits}, scheduling_{std::move(scheduling)},
+      policy_{std::move(policy)} {
+    if (scheduling_.has_value()) {
+        if (scheduling_->decision_entries == 0 || scheduling_->allocation_entries == 0 ||
+            scheduling_->policy.empty() || scheduling_->policy.size() > 256) {
+            throw std::invalid_argument{"invalid scheduling configuration"};
+        }
+        inventory_ = std::make_unique<scheduling::ResourceInventory>(graph);
+        if (!policy_) {
+            policy_ = scheduling::make_policy(scheduling_->policy, scheduling_->seed);
+        }
+    } else if (policy_) {
+        throw std::invalid_argument{"custom policy requires scheduler configuration"};
+    }
     if (limits.worker_entries == 0 || limits.compute_event_entries == 0 || limits.jobs == 0 ||
         limits.workers_per_job == 0 || limits.workers_per_job > 8192 || limits.steps_per_job == 0 ||
         limits.buckets_per_step == 0 || limits.compute_events_per_job == 0 ||
@@ -18,28 +33,32 @@ WorkloadEngine::WorkloadEngine(const topology::TopologyGraph& graph,
     }
 }
 std::uint32_t WorkloadEngine::validate(const JobSpec& spec) const {
+    const auto workers = spec.requested_workers != 0 ? spec.requested_workers : spec.workers.size();
+    if (spec.requested_workers != 0 && (!scheduling_.has_value() || !spec.workers.empty())) {
+        throw std::invalid_argument{
+            "requested workers require scheduling and exclude pinned workers"};
+    }
     if (spec.collective != CollectiveKind::AllReduce ||
         spec.algorithm != CollectiveAlgorithm::Ring || spec.name.empty() ||
-        spec.name.size() > 256 || spec.workers.empty() ||
-        spec.workers.size() > limits_.workers_per_job ||
-        spec.compute.size() != spec.workers.size() || spec.steps == 0 ||
-        spec.steps > limits_.steps_per_job || spec.gradient_bytes.value() == 0 ||
-        spec.bucket_bytes.value() == 0 || spec.chunk_bytes.value() == 0) {
+        spec.name.size() > 256 || workers == 0 || workers > limits_.workers_per_job ||
+        spec.compute.size() != workers || spec.steps == 0 || spec.steps > limits_.steps_per_job ||
+        spec.gradient_bytes.value() == 0 || spec.bucket_bytes.value() == 0 ||
+        spec.chunk_bytes.value() == 0) {
         throw std::invalid_argument{"invalid workload job specification"};
     }
     const auto buckets =
         spec.gradient_bytes.value() / spec.bucket_bytes.value() +
         static_cast<std::uint64_t>(spec.gradient_bytes.value() % spec.bucket_bytes.value() != 0);
     if (buckets > limits_.buckets_per_step ||
-        checked_product(spec.workers.size(), spec.overlap ? buckets : 1) >
-            limits_.compute_events_per_job) {
+        checked_product(workers, spec.overlap ? buckets : 1) > limits_.compute_events_per_job) {
         throw std::length_error{"workload bucket or compute-event limit exceeded"};
     }
     std::set<topology::GpuId> unique;
     std::uint64_t compute_total{0};
-    for (std::size_t index = 0; index < spec.workers.size(); ++index) {
-        if (graph_->find(spec.workers[index]) == nullptr ||
-            !unique.insert(spec.workers[index]).second || spec.compute[index].count() == 0) {
+    for (std::size_t index = 0; index < workers; ++index) {
+        if ((!spec.workers.empty() && (graph_->find(spec.workers[index]) == nullptr ||
+                                       !unique.insert(spec.workers[index]).second)) ||
+            spec.compute[index].count() == 0) {
             throw std::invalid_argument{"invalid worker assignment or compute duration"};
         }
         compute_total = checked_sum(compute_total, spec.compute[index].count());
@@ -54,8 +73,9 @@ JobId WorkloadEngine::schedule(JobSpec specification, sim::Simulation& simulatio
     if (jobs_.size() == limits_.jobs) {
         throw std::length_error{"workload job limit exceeded"};
     }
-    const auto slots = specification.workers.size() * (specification.overlap ? buckets : 1);
-    if (specification.workers.size() > limits_.worker_entries - worker_entries_ ||
+    const auto workers = specification.compute.size();
+    const auto slots = workers * (specification.overlap ? buckets : 1);
+    if (workers > limits_.worker_entries - worker_entries_ ||
         slots > limits_.compute_event_entries - event_entries_) {
         throw std::length_error{"workload global retained-state limit exceeded"};
     }
@@ -65,7 +85,7 @@ JobId WorkloadEngine::schedule(JobSpec specification, sim::Simulation& simulatio
     Record record{id, std::move(specification)};
     record.buckets = buckets;
     record.arrival_event = event;
-    worker_entries_ += record.spec.workers.size();
+    worker_entries_ += workers;
     event_entries_ += slots;
     jobs_.emplace(id, std::move(record));
     return id;
@@ -75,13 +95,17 @@ sim::EventId WorkloadEngine::schedule_control(JobId job, WorkloadEventKind kind,
                                               std::uint32_t worker) const {
     const auto& record = jobs_.at(job);
     if ((kind != WorkloadEventKind::Cancel && kind != WorkloadEventKind::WorkerFailure) ||
-        worker >= record.spec.workers.size()) {
+        worker >= record.spec.compute.size()) {
         throw std::invalid_argument{"invalid workload control event"};
     }
     return simulation.schedule(
         {when, sim::EventPriority::Critical, WorkloadEvent{job, kind, worker}});
 }
 void WorkloadEngine::handle(const WorkloadEvent& event, sim::SimulationContext& context) {
+    if (event.kind == WorkloadEventKind::GpuDown || event.kind == WorkloadEventKind::GpuUp) {
+        gpu_state(event, context);
+        return;
+    }
     auto& record = jobs_.at(event.job);
     if (terminal(record.state)) {
         return;
@@ -102,7 +126,7 @@ void WorkloadEngine::handle(const WorkloadEvent& event, sim::SimulationContext& 
         finish(record, JobState::Cancelled, "job cancelled", context);
         break;
     case WorkloadEventKind::WorkerFailure:
-        if (event.worker >= record.spec.workers.size()) {
+        if (event.worker >= record.spec.compute.size()) {
             throw std::invalid_argument{"unknown failed worker"};
         }
         finish(record, JobState::Failed, "worker failed", context);
@@ -112,6 +136,12 @@ void WorkloadEngine::handle(const WorkloadEvent& event, sim::SimulationContext& 
     }
 }
 void WorkloadEngine::arrive(Record& record, sim::SimulationContext& context) {
+    if (inventory_) {
+        record.state = JobState::Waiting;
+        trace(record, context.now(), "job_waiting");
+        admission_pending_ = true;
+        return;
+    }
     for (const auto worker : record.spec.workers) {
         if (assignments_.contains(worker)) {
             finish(record, JobState::Failed, "GPU assignment conflict", context);
@@ -122,6 +152,7 @@ void WorkloadEngine::arrive(Record& record, sim::SimulationContext& context) {
         assignments_.emplace(worker, record.id);
     }
     record.assigned = true;
+    record.allocated_at = context.now();
     start_step(record, context);
 }
 void WorkloadEngine::trace(const Record& record, sim::SimTimeNs now, std::string action) {
@@ -162,8 +193,9 @@ void WorkloadEngine::start_step(Record& record, sim::SimulationContext& context)
 }
 void WorkloadEngine::compute_ready(Record& record, const WorkloadEvent& event,
                                    sim::SimulationContext& context) {
-    if (record.state == JobState::Scheduled || event.step != record.step ||
-        event.worker >= record.spec.workers.size() || event.bucket >= record.buckets) {
+    if (record.state == JobState::Scheduled || record.state == JobState::Waiting ||
+        event.step != record.step || event.worker >= record.spec.workers.size() ||
+        event.bucket >= record.buckets) {
         throw std::logic_error{"stale workload compute event"};
     }
     const auto per_worker = record.spec.overlap ? record.buckets : 1;

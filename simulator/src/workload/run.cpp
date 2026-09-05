@@ -7,7 +7,26 @@
 #include <ostream>
 #include <stdexcept>
 namespace nexuslab::workload {
+namespace {
+void append_waiting_jobs(TrainingReport& report, const WorkloadEngine& jobs, std::size_t count) {
+    for (std::size_t id = 0; id < count; ++id) {
+        const auto snapshot = jobs.snapshot(JobId{id}, report.simulation.final_time);
+        if (!snapshot.has_value()) {
+            throw std::logic_error{"missing training job"};
+        }
+        if (!terminal(snapshot->state)) {
+            if (snapshot->state != JobState::Waiting) {
+                throw std::logic_error{"unfinished active training job"};
+            }
+            report.jobs.push_back(*snapshot);
+        }
+    }
+}
+} // namespace
 TrainingReport run_training(const TrainingScenario& scenario) {
+    if (scenario.controls.size() > 10000 || scenario.gpu_controls.size() > 10000) {
+        throw std::length_error{"scenario control limit exceeded"};
+    }
     auto graph = topology::generate_clos({scenario.gpus, 8, 8, 8});
     std::vector<transport::DirectedLinkConfiguration> links;
     for (const auto& link : graph->links()) {
@@ -22,7 +41,7 @@ TrainingReport run_training(const TrainingScenario& scenario) {
     routing::Router router{
         *graph, transport, routing::PolicyRegistry{}, {scenario.routing_policy, scenario.seed}};
     collective::RingExecutor collectives{*graph, router, scenario.local};
-    WorkloadEngine jobs{*graph, collectives};
+    WorkloadEngine jobs{*graph, collectives, {}, scenario.scheduling};
     TrainingDispatcher dispatcher{jobs, collectives, transport};
     sim::Simulation simulation{scenario.seed, sim::TraceMode::Disabled};
     for (const auto& spec : scenario.jobs) {
@@ -32,13 +51,24 @@ TrainingReport run_training(const TrainingScenario& scenario) {
         static_cast<void>(jobs.schedule_control(JobId{control.job}, control.kind, control.timestamp,
                                                 simulation, control.worker));
     }
-    TrainingReport report{simulation.run(dispatcher), jobs.take_completed(), {}, {}, {},
-                          router.take_decisions()};
-    if (report.simulation.status != sim::SimulationStatus::Completed ||
-        report.jobs.size() != scenario.jobs.size()) {
+    for (const auto& control : scenario.gpu_controls) {
+        static_cast<void>(
+            jobs.schedule_gpu_state(control.gpu, control.healthy, control.timestamp, simulation));
+    }
+    TrainingReport report{simulation.run(dispatcher),
+                          jobs.take_completed(),
+                          {},
+                          {},
+                          {},
+                          router.take_decisions(),
+                          0,
+                          {}};
+    if (report.simulation.status != sim::SimulationStatus::Completed) {
         throw std::runtime_error{
             report.simulation.error.value_or("training run did not finish all jobs")};
     }
+    append_waiting_jobs(report, jobs, scenario.jobs.size());
+    report.placements.assign(jobs.placements().begin(), jobs.placements().end());
     report.timeline.assign(jobs.timeline().begin(), jobs.timeline().end());
     report.collective_timeline.assign(collectives.timeline().begin(), collectives.timeline().end());
     for (std::uint64_t id = 0;; ++id) {
@@ -60,6 +90,8 @@ TrainingReport run_training(const TrainingScenario& scenario) {
 }
 std::string_view state_name(JobState state) {
     switch (state) {
+    case JobState::Waiting:
+        return "waiting";
     case JobState::Scheduled:
         return "scheduled";
     case JobState::Computing:
@@ -88,9 +120,25 @@ void write_report(const TrainingReport& report, std::ostream& output, bool inclu
         output << "job=" << job.id.value() << " state=" << state_name(job.state)
                << " steps=" << job.completed_steps << " elapsed_ns=" << job.elapsed_ns
                << " compute_gpu_ns=" << job.compute_gpu_ns << " idle_gpu_ns=" << job.idle_gpu_ns
-               << " reason=" << job.reason << '\n';
+               << " waiting_ns=" << job.waiting_ns << " reason=" << job.reason << '\n';
     }
     if (include_timeline) {
+        for (const auto& entry : report.placements) {
+            output << "placement job=" << entry.job.value()
+                   << " time_ns=" << entry.timestamp.count() << " policy=" << entry.policy
+                   << " version=" << entry.version
+                   << " outcome=" << static_cast<unsigned>(entry.outcome)
+                   << " requested_workers=" << entry.requested_workers
+                   << " priority=" << entry.priority << " racks=" << entry.locality.racks
+                   << " nics=" << entry.locality.nics
+                   << " cross_rack_ring_edges=" << entry.locality.cross_rack_ring_edges
+                   << " fragmentation_before=" << entry.fragmentation_before
+                   << " fragmentation_after=" << entry.fragmentation_after << " workers=";
+            for (const auto gpu : entry.workers) {
+                output << gpu.value() << ",";
+            }
+            output << " reason=" << entry.reason << '\n';
+        }
         for (const auto& entry : report.timeline) {
             output << "job_event job=" << entry.job.value()
                    << " time_ns=" << entry.timestamp.count() << " step=" << entry.step

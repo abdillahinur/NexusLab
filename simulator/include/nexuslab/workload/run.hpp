@@ -13,6 +13,7 @@ struct TrainingReport final {
     std::vector<collective::CollectiveTimeline> collective_timeline;
     std::vector<routing::RouteDecision> decisions;
     std::uint64_t maximum_waiting_bytes{0};
+    std::vector<scheduling::PlacementDecision> placements;
 };
 [[nodiscard]] TrainingReport run_training(const TrainingScenario& scenario);
 void write_report(const TrainingReport& report, std::ostream& output, bool include_timeline);

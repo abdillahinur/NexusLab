@@ -14,7 +14,7 @@ The detailed scope, acceptance criteria, and gates are defined in [NEXUSLAB_MAST
 | Fabric MVP | 2–3 | Clos topology plus chunk-level links, queues, and transfers | Complete; Clusters 2 and 3 gates approved |
 | Routing comparison | 4 | ECMP, least-loaded, and queue-aware routing | Complete; Cluster 4 gate approved |
 | Training workload MVP | 5–6 | Synthetic jobs and Ring AllReduce | Complete; Clusters 5 and 6 gates approved |
-| Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Not started |
+| Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Complete; Cluster 7 gate approved |
 | Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Not started |
 | Experiment platform | 11–12 | Reproducible matrices, results, and replay | Not started |
 | Portfolio dashboard | 13 | Replay-only explanatory dashboard | Not started |

@@ -1,0 +1,22 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 64
+seed: 42
+scheduling_policy: compact
+jobs:
+  - name: first-wave
+    requested_workers: 48
+    compute_ns: 10000
+    steps: 2
+  - name: queued-priority-job
+    requested_workers: 32
+    priority: 10
+    arrival_ns: 100
+    compute_ns: 10000
+    steps: 2
+  - name: small-backfill
+    requested_workers: 8
+    arrival_ns: 200
+    compute_ns: 10000
+    steps: 2

@@ -11,6 +11,14 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Milestone 5 / Cluster 7: optional non-preemptive scheduling and GPU placement.
+- Bounded resource inventory, validated atomic allocations, priority/arrival/ID waiting order,
+  non-reserving backfill, and release on success, failure or cancellation.
+- First-fit, seeded random, rack-local and compact placement with explainable decision records.
+- Dynamic worker-count requests, persistent GPU down/up controls, and explicit unfinished waiters.
+- Separate scheduling wait, allocation timing, rank locality and free-rack fragmentation metrics.
+- Analytical scheduler tests, policy comparisons, CLI example, CI smoke checks, ADR and Gate 7.
+
 - Milestone 4 completion with Cluster 5 workload and Cluster 6 collective architecture gates.
 - Explicit training job/GPU assignments, step/bucket synchronization, optional compute overlap,
   per-worker stragglers, cancellation/failure and elapsed/compute/idle GPU metrics.

@@ -9,8 +9,17 @@ namespace nexuslab::workload {
 JobSnapshot WorkloadEngine::inspect(const Record& record, sim::SimTimeNs now) {
     const auto end = record.finished.value_or(now);
     if (end < record.spec.arrival) {
-        return {record.id, record.state, record.step, record.spec.arrival, record.finished, 0, 0,
-                0,         record.reason};
+        return {record.id,
+                record.state,
+                record.step,
+                record.spec.arrival,
+                record.finished,
+                0,
+                0,
+                0,
+                record.reason,
+                record.allocated_at,
+                0};
     }
     const auto elapsed = end.count() - record.spec.arrival.count();
     auto compute = record.compute_gpu_ns;
@@ -23,13 +32,18 @@ JobSnapshot WorkloadEngine::inspect(const Record& record, sim::SimTimeNs now) {
                 compute, std::min(duration.count(), now.count() - record.step_started.count()));
         }
     }
-    const auto allocated =
-        record.assigned ? checked_product(elapsed, record.spec.workers.size()) : 0;
+    const auto wait_end = record.allocated_at.value_or(end);
+    const auto waiting = wait_end.count() - record.spec.arrival.count();
+    const auto allocated = record.allocated_at.has_value()
+                               ? checked_product(end.count() - record.allocated_at->count(),
+                                                 record.spec.workers.size())
+                               : 0;
     if (compute > allocated) {
         throw std::logic_error{"GPU compute exceeds allocated time"};
     }
     return {record.id, record.state,        record.step, record.spec.arrival, record.finished,
-            compute,   allocated - compute, elapsed,     record.reason};
+            compute,   allocated - compute, elapsed,     record.reason,       record.allocated_at,
+            waiting};
 }
 void WorkloadEngine::finish(Record& record, JobState state, std::string reason,
                             sim::SimulationContext& context) {
@@ -55,6 +69,10 @@ void WorkloadEngine::finish(Record& record, JobState state, std::string reason,
         for (const auto worker : record.spec.workers) {
             assignments_.erase(worker);
         }
+    }
+    if (inventory_) {
+        inventory_->release(record.id);
+        admission_pending_ = true;
     }
     record.state = state;
     record.reason = std::move(reason);

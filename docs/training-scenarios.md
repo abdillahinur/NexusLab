@@ -10,6 +10,7 @@ Build with `bash scripts/build.sh release`, then run:
 ```bash
 build/release/simulator/nexuslab train --file examples/training/two-worker.yaml --timeline
 build/release/simulator/nexuslab train --file examples/training/overlap-straggler.yaml --timeline
+build/release/simulator/nexuslab train --file examples/training/scheduled.yaml --timeline
 build/release/simulator/nexuslab train --profiles
 ```
 
@@ -29,6 +30,8 @@ scalars are unsigned and at most 20 characters. There are at most 10,000 jobs an
 | `version` | Required; exactly `1` |
 | `gpus` | Synthetic Clos GPU count, multiple of 64 from 64 to 8,192; default 64 |
 | `seed` | Deterministic simulation/routing seed, default 42 |
+| `scheduling_policy` | Optional `first-fit`, `random`, `rack-local`, or `compact`; absence preserves explicit assignment mode |
+| `gpu_controls` | Optional persistent GPU down/up sequence, requires scheduler |
 | `routing_policy` | `ecmp` (default), `shortest-path`, `least-loaded`, or `queue-aware` |
 | `bandwidth_bps` | Fabric bandwidth, default 100,000,000,000; must be positive |
 | `propagation_ns` | Fabric per-hop propagation, default 500 |
@@ -46,21 +49,24 @@ and fabric parameters, not vendor defaults.
 |---|---|
 | `name` | Human label; defaults to selected profile name |
 | `profile` | Parameter template; default `small-data-parallel` |
-| `workers` | Required ordered list of unique existing GPU IDs; order defines the ring |
+| `workers` | Ordered list of unique existing GPU IDs; mutually exclusive with `requested_workers` |
+| `requested_workers` | Positive worker count up to 8,192; requires `scheduling_policy` |
 | `arrival_ns` | Absolute arrival, default 0 |
 | `steps` | Positive step count, from profile |
-| `compute_ns` | Positive scalar for every worker or a duration list matching `workers`; from profile |
+| `compute_ns` | Positive scalar for every worker or a duration list matching worker count; from profile |
 | `gradient_bytes` | Positive total bytes per step, from profile |
 | `bucket_bytes` | Positive maximum bucket size; last bucket may be smaller; from profile |
 | `chunk_bytes` | Positive fabric transfer chunk size, default 4,096 |
 | `overlap` | Exactly `true` or `false`; default false |
-| `priority` | Unsigned metadata for future scheduling; it does not alter current admission order |
+| `priority` | Unsigned priority; larger values are considered first among waiting jobs in scheduler mode |
 | `collective` | Only `allreduce`, the default |
 | `algorithm` | Only `ring`, the default |
 
-Assignments are exclusive while a job runs. An overlap in GPU assignments fails the arriving job;
-there is no automatic placement, waiting queue or preemption. Simultaneous arrivals follow stable
-event-ID/input order. Disjoint jobs can run concurrently and contend on shared fabric links.
+Assignments are exclusive while a job runs. Without `scheduling_policy`, explicit conflicts fail
+the arriving job. With it, blocked jobs wait and are reconsidered after arrivals, resource release,
+and GPU state changes. Simultaneous arrivals follow stable event-ID/input order; priorities do not
+preempt an already admitted job at the same timestamp. Disjoint jobs can contend on shared links.
+See [scheduling semantics](scheduling.md) for policy definitions, backfill, bounds, and metrics.
 
 Without overlap, all worker compute finishes before the first bucket's collective. With overlap,
 compute is divided into equal-count bucket readiness intervals (integer rounding upward), and each
@@ -87,13 +93,15 @@ job's completion timestamp. No retries or reliable recovery are implied.
 
 ## Metrics and timelines
 
-The CLI exits 0 when every job succeeds, 1 when a job fails/cancels or a run error occurs, and 2 for
+The CLI exits 0 when every job succeeds, 1 when any job fails, cancels, remains waiting, or a run error occurs, and 2 for
 invalid command syntax. A drained event queue alone is not a successful workload outcome.
 
-- `elapsed_ns`: arrival-to-terminal job duration; pre-arrival cancellation has zero elapsed work.
+- `elapsed_ns`: arrival-to-terminal duration, or arrival-to-final-observation for a waiting job;
+  pre-arrival cancellation has zero elapsed work.
+- `waiting_ns`: arrival-to-allocation delay, or elapsed time if no allocation occurred.
 - `compute_gpu_ns`: sum of actual compute intervals over assigned workers, including partial work.
 - `idle_gpu_ns`: allocated GPU time minus compute time; includes straggler/barrier and communication
-  waits. Overlap never double-counts compute. Assignment rejection allocates no GPU time.
+  waits after allocation; scheduling wait is excluded. Overlap never double-counts compute. Assignment rejection allocates no GPU time.
 - `maximum_waiting_bytes`: maximum observed waiting occupancy among directed fabric queues.
 - `job_event`: timestamped step compute start/end, bucket collective start/end and terminal state.
 - `collective=` links a job/bucket timeline record to the collective timeline ID.

@@ -11,6 +11,9 @@ add_library(
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
     src/transport/runtime.cpp
+    src/scheduling/inventory.cpp
+    src/scheduling/policy.cpp
+    src/workload/scheduling.cpp
     src/workload/run.cpp
     src/workload/scenario.cpp
     src/workload/model.cpp
@@ -64,6 +67,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp
         tests/transport_runtime_test.cpp
+        tests/scheduling_test.cpp
         tests/training_test.cpp
         tests/routing_test.cpp
         tests/transport_progress_test.cpp
@@ -93,6 +97,8 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(nexuslab_tests)
 
+    add_test(NAME nexuslab_cli_scheduled_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/scheduled.yaml" --timeline)
+    set_tests_properties(nexuslab_cli_scheduled_training PROPERTIES PASS_REGULAR_EXPRESSION "placement job=")
     add_test(NAME nexuslab_cli_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --timeline)
     set_tests_properties(nexuslab_cli_training PROPERTIES PASS_REGULAR_EXPRESSION "state=succeeded")
     add_test(NAME nexuslab_cli_version COMMAND nexuslab --version)
@@ -115,6 +121,13 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
 endif()
 
 if(NEXUSLAB_BUILD_BENCHMARKS)
+    add_executable(nexuslab_scheduling_benchmarks benchmarks/scheduling_benchmark.cpp)
+    target_link_libraries(nexuslab_scheduling_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
+    nexuslab_enable_clang_tidy(nexuslab_scheduling_benchmarks)
+    if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
+        add_test(NAME nexuslab_scheduling_benchmark_smoke COMMAND nexuslab_scheduling_benchmarks --case burst)
+        set_tests_properties(nexuslab_scheduling_benchmark_smoke PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=scheduling")
+    endif()
     add_executable(nexuslab_training_benchmarks benchmarks/training_benchmark.cpp)
     target_link_libraries(nexuslab_training_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
     nexuslab_enable_clang_tidy(nexuslab_training_benchmarks)

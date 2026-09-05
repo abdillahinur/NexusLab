@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/collective/model.hpp"
+#include "nexuslab/scheduling/policy.hpp"
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/workload/model.hpp"
@@ -15,7 +16,14 @@ namespace nexuslab::workload {
 class WorkloadEngine final {
   public:
     WorkloadEngine(const topology::TopologyGraph& graph, collective::CollectiveExecutor& executor,
-                   WorkloadLimits limits = {});
+                   WorkloadLimits limits = {},
+                   std::optional<scheduling::Configuration> scheduling = std::nullopt,
+                   std::unique_ptr<scheduling::SchedulingPolicy> policy = nullptr);
+    void dispatch_waiting(sim::SimulationContext& context);
+    [[nodiscard]] sim::EventId schedule_gpu_state(topology::GpuId gpu, bool healthy,
+                                                  sim::SimTimeNs when,
+                                                  sim::Simulation& simulation) const;
+    [[nodiscard]] std::span<const scheduling::PlacementDecision> placements() const noexcept;
     [[nodiscard]] JobId schedule(JobSpec specification, sim::Simulation& simulation);
     [[nodiscard]] sim::EventId schedule_control(JobId job, WorkloadEventKind kind,
                                                 sim::SimTimeNs when, sim::Simulation& simulation,
@@ -45,8 +53,11 @@ class WorkloadEngine final {
         std::vector<std::optional<sim::EventId>> events;
         std::string reason;
         bool assigned{false};
+        std::optional<sim::SimTimeNs> allocated_at;
     };
     [[nodiscard]] std::uint32_t validate(const JobSpec& spec) const;
+    void gpu_state(const WorkloadEvent& event, sim::SimulationContext& context);
+    void admit(Record& record, sim::SimulationContext& context);
     void arrive(Record& record, sim::SimulationContext& context);
     void start_step(Record& record, sim::SimulationContext& context);
     void compute_ready(Record& record, const WorkloadEvent& event, sim::SimulationContext& context);
@@ -58,6 +69,12 @@ class WorkloadEngine final {
     const topology::TopologyGraph* graph_;
     collective::CollectiveExecutor* executor_;
     WorkloadLimits limits_;
+    std::optional<scheduling::Configuration> scheduling_;
+    std::unique_ptr<scheduling::ResourceInventory> inventory_;
+    std::unique_ptr<scheduling::SchedulingPolicy> policy_;
+    bool admission_pending_{false};
+    std::size_t allocation_entries_{0};
+    std::vector<scheduling::PlacementDecision> placements_;
     std::size_t worker_entries_{0};
     std::size_t event_entries_{0};
     std::map<JobId, Record> jobs_;
