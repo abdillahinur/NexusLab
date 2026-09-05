@@ -1398,6 +1398,9 @@ Approve the transfer abstraction before routing and workload generation are buil
 
 # Cluster 4 — Routing Policy Framework
 
+**Status: Complete — 2026-09-05.** [Architecture Gate 4](docs/architecture-gates/cluster-4.md)
+records correctness, routing comparisons, cache/snapshot costs, and accepted limitations.
+
 ## Objective
 
 Create a pluggable routing layer and implement trustworthy baselines.
@@ -1426,32 +1429,15 @@ Create a pluggable routing layer and implement trustworthy baselines.
 - route-decision telemetry;
 - policy registry.
 
-## Interface
+## Accepted Interface Refinement
 
-```cpp
-struct RouteRequest {
-    FlowId flow_id;
-    EntityId source;
-    EntityId destination;
-    std::uint64_t bytes_remaining;
-    FabricSnapshot snapshot;
-};
-
-struct RouteDecision {
-    Path path;
-    std::string reason;
-    double confidence;
-};
-
-class RoutingPolicy {
-public:
-    virtual RouteDecision choose_route(
-        const RouteRequest& request
-    ) = 0;
-
-    virtual ~RoutingPolicy() = default;
-};
-```
+[ADR-007](docs/adr/ADR-007-routing-policy-boundary.md) refines the illustrative interface into
+`RouteRequest` (flow key, endpoints, bytes and chunk size), `PolicyInput` (request, seed, borrowed
+candidate paths and read-only fabric view), and `RoutingPolicy::choose` (validated candidate index,
+integer score and reason). `Router` owns path lookup, submission and bounded `RouteDecision`
+records. An uncalibrated floating-point confidence field is omitted. Selection is per transfer at
+admission; current queue state is read synchronously. Failure rerouting applies to new admissions,
+while existing dropped chunks retain the explicit no-retry transport semantics.
 
 ## Tests
 
@@ -2911,6 +2897,9 @@ Demo:
 
 ## Milestone 3 — Routing Comparison
 
+**Status: Complete — 2026-09-05.** Run `bash scripts/benchmark-routing-suite.sh` for
+the repeatable four-policy comparison and path-lookup scale matrix.
+
 Includes:
 
 - Cluster 4;
@@ -3483,8 +3472,8 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | 0 | Project Foundation | Complete | Yes |
 | 1 | Deterministic Simulation Core | Complete | Yes |
 | 2 | Topology and Cluster Model | Complete | Yes |
-| 3 | Link, Queue, and Transfer Model | In Progress | No |
-| 4 | Routing Policy Framework | Not Started | No |
+| 3 | Link, Queue, and Transfer Model | Complete | Yes |
+| 4 | Routing Policy Framework | Complete | Yes |
 | 5 | Training Workload Engine | Not Started | No |
 | 6 | Collective Communication Engine | Not Started | No |
 | 7 | Scheduler and GPU Placement | Not Started | No |

@@ -11,6 +11,13 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Cluster 4 routing-policy framework and Milestone 3 Routing Comparison completion.
+- Bounded operational shortest-path enumeration and FIFO pair caching with revision invalidation.
+- Extensible configuration-selected shortest-path, stable ECMP, least-loaded, and queue-aware policies.
+- Borrowed fabric views, checked integer path scores, and bounded inspectable routing decisions.
+- Admission-time transport integration with failure-aware alternative paths and explicit no-route outcomes.
+- Routing correctness tests, CI smoke coverage, and reproducible policy/lookup comparison benchmarks.
+
 - Cluster 3 completion and Milestone 2 Fabric MVP architecture gate approval.
 - Transfer byte/chunk conservation snapshots and exactly-once success/failure outcomes.
 - Per-direction traffic, marking, drop-reason, and elapsed serializer busy-time statistics.

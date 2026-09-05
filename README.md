@@ -8,11 +8,10 @@ SPDX-License-Identifier: Apache-2.0
 NexusLab is a deterministic digital twin and experimentation platform for AI training infrastructure. It will model distributed workloads, collective communication, network congestion, scheduling, and failures across configurable GPU clusters so infrastructure policies can be compared through reproducible synthetic experiments.
 
 > [!IMPORTANT]
-> NexusLab has completed Cluster 0 (Project Foundation), Cluster 1 (Deterministic Simulation Core),
-> Cluster 2 (Topology and Cluster Model), and Cluster 3 (Link, Queue, and Transfer Model).
-> Milestone 2 — Fabric MVP is complete: synthetic fixed-route transfers expose queue buildup,
-> drops, progress, and final outcomes. Routing policies and training workloads remain future work.
-> Measurements describe this simulator on the documented test host, not real hardware fidelity.
+> NexusLab has completed Clusters 0–4, including Milestone 3 — Routing Comparison.
+> Synthetic transfers can use shortest-path, ECMP, least-loaded, or queue-aware routing with
+> inspectable decisions and deterministic failure-aware path selection. Training workloads remain
+> future work. Measurements describe this simulator on the documented host, not hardware fidelity.
 
 ## Current foundation
 
@@ -30,7 +29,8 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
   summary inspection;
 - chunk-level fabric transfers with FIFO service, finite buffers, marking, and per-link counters;
 - transfer progress, exactly-once final outcomes, and link/port/switch failure reconciliation;
-- simulation-core, topology, and transport benchmark harnesses.
+- configuration-selected routing policies, bounded operational path caching, and decision records;
+- simulation-core, topology, transport, and routing comparison benchmark harnesses.
 
 The [Cluster 3 gate](docs/architecture-gates/cluster-3.md) records completion evidence.
 To transfer synthetic data across a generated 512-GPU Clos and observe queue buildup:
@@ -43,6 +43,21 @@ The output includes delivered/dropped bytes, successful/failed transfers, maximu
 serializer busy time, event count, and peak RSS. Run `bash scripts/benchmark-transport-suite.sh`
 for the three-repeat scale and chunk-size matrix. These fixed-path benchmark harnesses are the
 Milestone 2 demo; a scenario-driven workload CLI belongs to later milestones.
+
+The [Cluster 4 gate](docs/architecture-gates/cluster-4.md) records routing correctness and
+comparison evidence. Compare the same synthetic traffic across policies:
+
+```bash
+for policy in shortest-path ecmp least-loaded queue-aware; do
+  bash scripts/benchmark-routing.sh --policy "$policy" --pattern all-to-all --flows 1000
+done
+```
+
+The harness reports successful/failed transfers, delivered/dropped bytes, successful-transfer
+p50/p95 latency, queue occupancy, decision/outcome digests, cache counters, wall time, and RSS.
+Use `--mode lookup --gpus 2048 --flows 10000` for cold/warm path and policy selection measurements,
+or `bash scripts/benchmark-routing-suite.sh` for the complete three-repeat matrix.
+Routing occurs once at transfer admission; existing transfers retain their paths and do not retry.
 
 Dependency commits are pinned in `cmake/NexusLabDependencies.cmake`.
 

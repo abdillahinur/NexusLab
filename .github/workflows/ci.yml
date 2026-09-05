@@ -111,3 +111,6 @@ jobs:
 
       - name: Run transport benchmark smoke test
         run: bash scripts/benchmark-transport.sh --flows 100
+
+      - name: Run routing comparison smoke test
+        run: bash scripts/benchmark-routing.sh --flows 100

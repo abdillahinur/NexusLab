@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved architecture through Cluster 3. Subsystem details will
+This document describes the gate-approved architecture through Cluster 4. Subsystem details will
 be added as their implementation clusters reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
@@ -130,6 +130,35 @@ critical-priority reconciliation as link failures. Recovery admits new work with
 Snapshots cost O(chunks in the transfer); terminal accounting is incremental. Completed records
 remain inspectable for the runtime lifetime, so experiments must fit the retained-state limits.
 Allocation or event-ID exhaustion terminates a run; rollback and resumption are not promised.
+
+## Cluster 4 routing design
+
+The routing layer is separate from the event engine and transport runtime. `Router` selects a
+registry-configured policy and submits its chosen fixed path through the existing transport API.
+`PathService` enumerates the complete operational minimum-hop fabric path set with reverse BFS
+and a strictly decreasing-distance walk. Canonical directed-link ordering makes ties reproducible.
+Path/hop/cache bounds reject oversized sets without truncation. A FIFO pair cache invalidates
+on effective link, port, or switch state changes, including recovery from cached disconnection.
+Topology structure must remain fixed for the service lifetime; operational revisions are runtime
+metadata and do not change canonical topology serialization.
+
+Policies read a borrowed `FabricView` and candidate span synchronously. The view contains one
+pointer and reads current per-arc waiting plus full active-chunk bytes; no fabric snapshot is copied.
+Shortest-path chooses the first path, ECMP uses explicitly encoded versioned flow hashing,
+least-loaded minimizes outstanding byte sums, and queue-aware minimizes a checked integer estimate
+of first-chunk queue/service/propagation delay. Policies return candidate indices, which the router
+validates, and cannot mutate simulation state through the interface. New policies register factories
+without modifying the simulation engine.
+
+Each admitted transfer has a pinned route. Failures cancel/drop existing affected work under
+Cluster 3 rules; subsequent admissions select surviving paths. A disconnected request records a
+no-route decision and creates no transfer. Decision records include request, policy/version,
+simulated time, operational revision, candidate count, path, score, reason, and transfer identity.
+The bounded record buffer can be drained; durable telemetry serialization remains later work.
+Host policy execution time is measured outside deterministic decision records.
+
+See [ADR-007](docs/adr/ADR-007-routing-policy-boundary.md) for alternatives, exact scoring and
+bounds, and [Architecture Gate 4](docs/architecture-gates/cluster-4.md) for tests and measurements.
 
 ## Policy boundaries
 

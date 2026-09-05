@@ -187,12 +187,23 @@ LinkId TopologyGraph::connect_fabric(NodeId endpoint_a, PortRole role_a, NodeId 
     return link_id;
 }
 
+std::uint64_t TopologyGraph::operational_revision() const noexcept { return operational_revision_; }
+
 bool TopologyGraph::set_link_state(LinkId id, OperationalState state) noexcept {
     PhysicalLink* link = find_dense(links_, id);
     if (link == nullptr) {
         return false;
     }
-    link->state = state;
+    if (state != OperationalState::Up && state != OperationalState::Down) {
+        return false;
+    }
+    if (link->state != state) {
+        if (operational_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+            return false;
+        }
+        ++operational_revision_;
+        link->state = state;
+    }
     return true;
 }
 
@@ -201,7 +212,16 @@ bool TopologyGraph::set_port_state(PortId id, OperationalState state) noexcept {
     if (port == nullptr) {
         return false;
     }
-    port->state = state;
+    if (state != OperationalState::Up && state != OperationalState::Down) {
+        return false;
+    }
+    if (port->state != state) {
+        if (operational_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+            return false;
+        }
+        ++operational_revision_;
+        port->state = state;
+    }
     return true;
 }
 
@@ -210,7 +230,16 @@ bool TopologyGraph::set_switch_state(SwitchId id, OperationalState state) noexce
     if (switch_entity == nullptr) {
         return false;
     }
-    switch_entity->state = state;
+    if (state != OperationalState::Up && state != OperationalState::Down) {
+        return false;
+    }
+    if (switch_entity->state != state) {
+        if (operational_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+            return false;
+        }
+        ++operational_revision_;
+        switch_entity->state = state;
+    }
     return true;
 }
 

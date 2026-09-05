@@ -31,6 +31,8 @@ class TopologyGraph final {
     [[nodiscard]] LinkId connect_fabric(NodeId endpoint_a, PortRole role_a, NodeId endpoint_b,
                                         PortRole role_b);
 
+    [[nodiscard]] std::uint64_t operational_revision() const noexcept;
+
     [[nodiscard]] bool set_link_state(LinkId id, OperationalState state) noexcept;
     [[nodiscard]] bool set_port_state(PortId id, OperationalState state) noexcept;
     [[nodiscard]] bool set_switch_state(SwitchId id, OperationalState state) noexcept;
@@ -72,6 +74,7 @@ class TopologyGraph final {
     SequentialIdGenerator<RackId> rack_ids_;
     SequentialIdGenerator<PortId> port_ids_;
     SequentialIdGenerator<LinkId> link_ids_;
+    std::uint64_t operational_revision_{0};
     std::vector<GpuWorker> gpus_;
     std::vector<Nic> nics_;
     std::vector<Switch> switches_;
