@@ -79,6 +79,7 @@ class DirectedLinkQueue final {
     [[nodiscard]] const DirectedLinkConfiguration& configuration() const noexcept;
     [[nodiscard]] const TransferChunk* active() const noexcept;
     [[nodiscard]] QueueSnapshot snapshot() const noexcept;
+    [[nodiscard]] const TransferChunk* next_waiting() const noexcept;
 
     [[nodiscard]] AdmissionResult admit(TransferChunk chunk);
     [[nodiscard]] std::optional<ServiceTransition> complete_service();

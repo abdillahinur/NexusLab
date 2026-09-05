@@ -358,3 +358,30 @@ Revisit this decision if:
 - a validated scenario requires retransmission, mid-flight rerouting, or packet semantics;
 - event payload growth exceeds the Gate 1 size budget;
 - failure reconciliation cannot remain atomic through the transport façade.
+
+## Completion interface refinement — 2026-09-05
+
+Cluster 3 completion uses runtime-owned transfer records and queryable `TransferSnapshot` values.
+Snapshots partition bytes/chunks into registered, awaiting initial arrival, waiting, active,
+propagating, delivered, and dropped-by-reason categories. The first initial-arrival scheduling seals
+membership and records the start time; low-level callers must register all chunks of a transfer
+before scheduling any of them. Later registration under a sealed transfer ID is rejected.
+Submission registers the complete partition before scheduling. Final outcomes are retained in the
+snapshot and emitted once through `take_completed_transfers()`, in terminal-event order. They are
+value records, not new simulation events or a durable telemetry log. Engine completion continues
+to mean queue exhaustion, independently of successful/failed transfers.
+
+Per-direction service statistics count accepted arrivals (including immediate service), service
+starts, completed serializations, marks applied at this hop, and drops by buffer-full/link-down.
+A chunk may count as marked at multiple hops. Failed serialization counts busy time up to failure
+but does not count a partially serialized chunk as completed. Statistics queries include elapsed
+active service at the caller's current simulation time; queries do not mutate counters.
+
+Runtime limits bound retained chunks, retained route entries and route length. Defaults are
+1,000,000 chunks, 16,000,000 directed route entries and 1,024 hops; callers may supply other positive
+limits as explicit experiment inputs. Terminal records remain retained for this single-use runtime.
+Input/range/timing checks precede normal mutation. Allocation or event scheduling exhaustion is a
+fatal run failure, not a resumable transaction; no strong rollback guarantee is claimed for memory
+exhaustion. Service promotion validates timing and reserves the next event before changing queues.
+The graph must outlive the runtime, remain structurally fixed, and use the runtime's link/port/switch
+state-change events during traffic. Fixed paths and local-attachment exclusions are unchanged.

@@ -11,6 +11,14 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Cluster 3 completion and Milestone 2 Fabric MVP architecture gate approval.
+- Transfer byte/chunk conservation snapshots and exactly-once success/failure outcomes.
+- Per-direction traffic, marking, drop-reason, and elapsed serializer busy-time statistics.
+- Critical port and switch failure events with cancellation, draining, and recovery reconciliation.
+- Bounded retained transport state and timing validation before ordinary admission mutations.
+- Transport benchmark CLI, CI smoke coverage, repeatable scale/chunk-size suite, and Linux ARM64 baseline.
+- Transport conservation, outcome ordering, failure, recovery, stop, limit, and overflow tests.
+
 - Cluster 0 repository foundation.
 - Apache License 2.0 licensing.
 - Initial architecture decisions and roadmap.

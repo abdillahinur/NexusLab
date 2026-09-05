@@ -6,6 +6,7 @@
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/transport/events.hpp"
 #include "nexuslab/transport/link_queue.hpp"
+#include "nexuslab/transport/statistics.hpp"
 
 #include <optional>
 
@@ -26,6 +27,8 @@ class DirectedLinkService final {
     [[nodiscard]] ServiceTransition handle_completion(const TransmissionCompleteEvent& event,
                                                       sim::SimulationContext& context);
     [[nodiscard]] QueueDrain reconcile_down(sim::SimulationContext& context);
+    [[nodiscard]] LinkStatistics statistics(sim::SimTimeNs now) const;
+    void record_link_down(const TransferChunk& chunk);
 
   private:
     [[nodiscard]] sim::EventId schedule_completion(const TransferChunk& chunk,
@@ -33,6 +36,8 @@ class DirectedLinkService final {
 
     DirectedLinkQueue queue_;
     std::optional<sim::EventId> scheduled_completion_;
+    LinkStatistics statistics_;
+    std::optional<sim::SimTimeNs> busy_since_;
 };
 
 } // namespace nexuslab::transport

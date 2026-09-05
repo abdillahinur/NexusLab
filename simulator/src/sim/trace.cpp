@@ -84,10 +84,14 @@ EventPayloadKind payload_kind(const EventPayload& payload) {
                 return EventPayloadKind::ChunkArrival;
             } else if constexpr (std::is_same_v<Payload, transport::TransmissionCompleteEvent>) {
                 return EventPayloadKind::TransmissionComplete;
-            } else {
-                static_assert(std::is_same_v<Payload, transport::LinkStateChangeEvent>,
-                              "event payload kind is not mapped");
+            } else if constexpr (std::is_same_v<Payload, transport::LinkStateChangeEvent>) {
                 return EventPayloadKind::LinkStateChange;
+            } else if constexpr (std::is_same_v<Payload, transport::PortStateChangeEvent>) {
+                return EventPayloadKind::PortStateChange;
+            } else {
+                static_assert(std::is_same_v<Payload, transport::SwitchStateChangeEvent>,
+                              "event payload kind is not mapped");
+                return EventPayloadKind::SwitchStateChange;
             }
         },
         payload);

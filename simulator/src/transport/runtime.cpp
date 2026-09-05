@@ -6,16 +6,21 @@
 #include "nexuslab/sim/event.hpp"
 #include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/sim/time.hpp"
+#include "nexuslab/transport/timing.hpp"
 
 #include <limits>
 #include <stdexcept>
 #include <utility>
 
 namespace nexuslab::transport {
-
 TransportRuntime::TransportRuntime(topology::TopologyGraph& topology,
-                                   const std::vector<DirectedLinkConfiguration>& configurations)
-    : topology_{&topology} {
+                                   const std::vector<DirectedLinkConfiguration>& configurations,
+                                   TransportLimits limits)
+    : topology_{&topology}, limits_{limits} {
+    if (limits.maximum_chunks == 0 || limits.maximum_route_entries == 0 ||
+        limits.maximum_route_hops == 0) {
+        throw std::invalid_argument{"transport limits must be positive"};
+    }
     for (const DirectedLinkConfiguration& configuration : configurations) {
         static_cast<void>(require_fabric_arc(configuration.link));
         const auto [iterator, inserted] = services_.try_emplace(configuration.link, configuration);
@@ -35,8 +40,21 @@ void TransportRuntime::register_chunk(RoutedChunk routed_chunk) {
     }
     validate_route(routed_chunk.route, std::nullopt, std::nullopt);
 
+    validate_capacity(1, routed_chunk.route.size());
+    validate_timing(routed_chunk.chunk.bytes, routed_chunk.route, sim::SimTimeNs{0});
     const ChunkId id = routed_chunk.chunk.id;
     const TransferId transfer = routed_chunk.chunk.transfer;
+    if (chunks_.contains(id)) {
+        throw std::invalid_argument{"duplicate routed chunk identifier"};
+    }
+    const auto existing = transfers_.find(transfer);
+    if (existing != transfers_.end() && existing->second.started_at.has_value()) {
+        throw std::invalid_argument{"cannot append chunks to a sealed transfer"};
+    }
+    const TrafficCount total =
+        add_traffic(existing == transfers_.end() ? TrafficCount{} : existing->second.total,
+                    TrafficCount{routed_chunk.chunk.bytes.value(), 1});
+    const std::size_t hops = routed_chunk.route.size();
     const auto [iterator, inserted] =
         chunks_.try_emplace(id, ChunkRecord{routed_chunk.chunk, std::move(routed_chunk.route),
                                             ChunkTransitState::Registered, 0, std::nullopt});
@@ -44,6 +62,10 @@ void TransportRuntime::register_chunk(RoutedChunk routed_chunk) {
     if (!inserted) {
         throw std::invalid_argument{"duplicate routed chunk identifier"};
     }
+    TransferRecord& transfer_record = transfers_[transfer];
+    transfer_record.chunks.push_back(id);
+    transfer_record.total = total;
+    route_entries_ += hops;
     transfer_ids_.advance_past(transfer);
     chunk_ids_.advance_past(id);
 }
@@ -68,26 +90,25 @@ SubmittedTransfer TransportRuntime::submit_transfer(const TransferRequest& reque
         throw std::overflow_error{"chunk count exceeds runtime container range"};
     }
 
-    std::vector<ByteCount> partitions;
-    partitions.reserve(static_cast<std::size_t>(chunk_count));
-    for (std::uint64_t ordinal = 0; ordinal < full_chunks; ++ordinal) {
-        partitions.push_back(request.maximum_chunk_bytes);
+    validate_capacity(static_cast<std::size_t>(chunk_count), request.route.size());
+    if (full_chunks != 0) {
+        validate_timing(request.maximum_chunk_bytes, request.route, context.now());
     }
     if (remainder != 0) {
-        partitions.emplace_back(remainder);
+        validate_timing(ByteCount{remainder}, request.route, context.now());
     }
-
     const TransferId transfer = transfer_ids_.next();
     SubmittedTransfer submitted{transfer, {}};
-    submitted.chunks.reserve(partitions.size());
-    for (const ByteCount bytes : partitions) {
+    submitted.chunks.reserve(static_cast<std::size_t>(chunk_count));
+    for (std::uint64_t ordinal = 0; ordinal < chunk_count; ++ordinal) {
+        const ByteCount bytes =
+            ordinal < full_chunks ? request.maximum_chunk_bytes : ByteCount{remainder};
         const ChunkId chunk = chunk_ids_.next();
-        register_chunk(RoutedChunk{
-            TransferChunk{transfer, chunk, bytes, 0, false},
-            request.route,
-        });
-        static_cast<void>(schedule_initial_arrival(chunk, context));
+        register_chunk(RoutedChunk{TransferChunk{transfer, chunk, bytes, 0, false}, request.route});
         submitted.chunks.push_back(SubmittedChunk{chunk, bytes});
+    }
+    for (const SubmittedChunk& chunk : submitted.chunks) {
+        static_cast<void>(schedule_initial_arrival(chunk.id, context));
     }
     return submitted;
 }
@@ -99,6 +120,7 @@ sim::EventId TransportRuntime::schedule_initial_arrival(ChunkId chunk,
         throw std::logic_error{"routed chunk initial arrival is already scheduled"};
     }
 
+    validate_timing(record.chunk.bytes, record.route, context.now());
     const sim::EventId event_id = context.schedule(sim::EventSpec{
         context.now(),
         sim::EventPriority::Normal,
@@ -106,6 +128,10 @@ sim::EventId TransportRuntime::schedule_initial_arrival(ChunkId chunk,
     });
     record.state = ChunkTransitState::AwaitingArrival;
     record.scheduled_arrival = event_id;
+    auto& transfer = transfers_.at(record.chunk.transfer);
+    if (!transfer.started_at.has_value()) {
+        transfer.started_at = context.now();
+    }
     return event_id;
 }
 
@@ -141,25 +167,33 @@ void TransportRuntime::handle_arrival(const ChunkArrivalEvent& event,
         throw std::logic_error{"unexpected chunk-arrival event"};
     }
 
-    record.scheduled_arrival.reset();
     if (static_cast<std::size_t>(event.hop_index) == record.route.size()) {
+        record.scheduled_arrival.reset();
         record.state = ChunkTransitState::Delivered;
+        record_terminal(record, context.now());
         return;
     }
 
     const topology::DirectedLinkId link = record.route[event.hop_index];
     const topology::DirectedLink directed = require_fabric_arc(link);
     if (!topology_->is_operational(directed)) {
+        require_service(link).record_link_down(record.chunk);
+        record.scheduled_arrival.reset();
         record.state = ChunkTransitState::DroppedLinkDown;
+        record_terminal(record, context.now());
         return;
     }
 
     record.chunk.hop_index = event.hop_index;
     const AdmissionResult admission = require_service(link).admit(record.chunk, context);
+    record.scheduled_arrival.reset();
     record.chunk.marked = record.chunk.marked || admission.marked_here;
     record.state = admission.disposition == AdmissionDisposition::DroppedBufferFull
                        ? ChunkTransitState::DroppedBufferFull
                        : ChunkTransitState::Admitted;
+    if (record.state == ChunkTransitState::DroppedBufferFull) {
+        record_terminal(record, context.now());
+    }
 }
 
 void TransportRuntime::handle_completion(const TransmissionCompleteEvent& event,
@@ -224,7 +258,7 @@ void TransportRuntime::handle_link_state_change(const LinkStateChangeEvent& even
             continue;
         }
         const QueueDrain drained = service->second.reconcile_down(context);
-        mark_dropped_link_down(drained, directed);
+        mark_dropped_link_down(drained, directed, context.now());
     }
 }
 
@@ -261,6 +295,7 @@ topology::DirectedLink TransportRuntime::require_fabric_arc(topology::DirectedLi
 void TransportRuntime::validate_route(std::span<const topology::DirectedLinkId> route,
                                       std::optional<topology::NodeId> expected_source,
                                       std::optional<topology::NodeId> expected_destination) const {
+    validate_capacity(0, route.size());
     if (route.empty()) {
         throw std::invalid_argument{"routed chunk path must be nonempty"};
     }
@@ -319,8 +354,8 @@ DirectedLinkService& TransportRuntime::require_service(topology::DirectedLinkId 
 }
 
 void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
-                                              topology::DirectedLinkId link) {
-    const auto mark = [this, link](const TransferChunk& chunk) {
+                                              topology::DirectedLinkId link, sim::SimTimeNs now) {
+    const auto mark = [this, link, now](const TransferChunk& chunk) {
         ChunkRecord& record = require_chunk(chunk.id);
         if (record.state != ChunkTransitState::Admitted || record.hop_index != chunk.hop_index ||
             static_cast<std::size_t>(record.hop_index) >= record.route.size() ||
@@ -329,6 +364,7 @@ void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
         }
         record.chunk = chunk;
         record.state = ChunkTransitState::DroppedLinkDown;
+        record_terminal(record, now);
     };
 
     if (drained.active.has_value()) {

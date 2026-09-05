@@ -74,6 +74,16 @@ class ServiceDispatcher final {
         return completion_times_;
     }
 
+    void operator()(const nexuslab::transport::PortStateChangeEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected port-state event in this dispatcher"};
+    }
+
+    void operator()(const nexuslab::transport::SwitchStateChangeEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected switch-state event in this dispatcher"};
+    }
+
   private:
     DirectedLinkService* service_;
     std::vector<TransferChunk> submissions_;
@@ -181,6 +191,33 @@ TEST(DirectedLinkServiceTest, RejectsCompletionTimeOverflowBeforeQueueMutation) 
     EXPECT_EQ(result.error, std::string{"serialization completion exceeds simulated-time range"});
     EXPECT_EQ(service.queue().snapshot(), (QueueSnapshot{ByteCount{0}, 0, ByteCount{0}, 0, false}));
     EXPECT_FALSE(service.scheduled_completion().has_value());
+}
+
+TEST(DirectedLinkServiceTest, PromotionOverflowLeavesQueueAndCountersUnchanged) {
+    DirectedLinkService service{service_configuration()};
+    ServiceDispatcher dispatcher{service, {service_chunk(0, 100), service_chunk(1, 100)}};
+    sim::Simulation simulation{42};
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+    static_cast<void>(simulation.schedule(
+        {sim::SimTimeNs{maximum - 150}, sim::EventPriority::Normal, sim::NoOpEvent{0}}));
+    const auto result = simulation.run(dispatcher);
+    EXPECT_EQ(result.status, sim::SimulationStatus::Failed);
+    EXPECT_EQ(result.error, std::string{"serialization completion exceeds simulated-time range"});
+    ASSERT_NE(service.queue().active(), nullptr);
+    EXPECT_EQ(service.queue().active()->id, ChunkId{0});
+    EXPECT_EQ(service.queue().snapshot().waiting_bytes, ByteCount{100});
+    EXPECT_EQ(service.statistics(result.final_time).completed, TrafficCount{});
+    EXPECT_EQ(service.statistics(result.final_time).started, (TrafficCount{100, 1}));
+}
+
+TEST(TransportEventTest, PortAndSwitchKindsAreStableAndWithinBudget) {
+    const auto port = sim::EventPayload{
+        PortStateChangeEvent{topology::PortId{1}, topology::OperationalState::Down}};
+    const auto network_switch = sim::EventPayload{
+        SwitchStateChangeEvent{topology::SwitchId{1}, topology::OperationalState::Up}};
+    EXPECT_EQ(static_cast<std::uint8_t>(sim::payload_kind(port)), 5U);
+    EXPECT_EQ(static_cast<std::uint8_t>(sim::payload_kind(network_switch)), 6U);
+    EXPECT_LE(sizeof(sim::Event), 80U);
 }
 
 } // namespace

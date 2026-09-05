@@ -11,6 +11,8 @@ add_library(
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
     src/transport/runtime.cpp
+    src/transport/progress.cpp
+    src/transport/failure.cpp
     src/transport/timing.cpp
     src/topology/clos.cpp
     src/topology/entities.cpp
@@ -52,6 +54,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp
         tests/transport_runtime_test.cpp
+        tests/transport_progress_test.cpp
         tests/topology_clos_test.cpp
         tests/topology_entities_test.cpp
         tests/topology_export_test.cpp
@@ -98,6 +101,13 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
 endif()
 
 if(NEXUSLAB_BUILD_BENCHMARKS)
+    add_executable(nexuslab_transport_benchmarks benchmarks/transport_benchmark.cpp)
+    target_link_libraries(nexuslab_transport_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
+    nexuslab_enable_clang_tidy(nexuslab_transport_benchmarks)
+    if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
+        add_test(NAME nexuslab_transport_benchmark_smoke COMMAND nexuslab_transport_benchmarks --flows 2)
+        set_tests_properties(nexuslab_transport_benchmark_smoke PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=transport")
+    endif()
     add_executable(nexuslab_benchmarks benchmarks/simulation_benchmark.cpp)
     target_link_libraries(nexuslab_benchmarks PRIVATE NexusLab::core nexuslab_project_options)
     nexuslab_enable_clang_tidy(nexuslab_benchmarks)

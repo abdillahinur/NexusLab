@@ -108,3 +108,6 @@ jobs:
 
       - name: Run benchmark harness
         run: bash scripts/benchmark.sh 100000
+
+      - name: Run transport benchmark smoke test
+        run: bash scripts/benchmark-transport.sh --flows 100

@@ -42,6 +42,16 @@ template <typename Handler> class NoOpDispatcher final {
         throw std::logic_error{"unexpected link-state event in no-op dispatcher"};
     }
 
+    void operator()(const nexuslab::transport::PortStateChangeEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected port-state event in this dispatcher"};
+    }
+
+    void operator()(const nexuslab::transport::SwitchStateChangeEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected switch-state event in this dispatcher"};
+    }
+
   private:
     Handler handler_;
 };

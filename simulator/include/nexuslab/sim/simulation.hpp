@@ -87,6 +87,10 @@ class Simulation final {
                 std::is_invocable_v<Dispatcher&, const transport::TransmissionCompleteEvent&,
                                     SimulationContext&> &&
                 std::is_invocable_v<Dispatcher&, const transport::LinkStateChangeEvent&,
+                                    SimulationContext&> &&
+                std::is_invocable_v<Dispatcher&, const transport::PortStateChangeEvent&,
+                                    SimulationContext&> &&
+                std::is_invocable_v<Dispatcher&, const transport::SwitchStateChangeEvent&,
                                     SimulationContext&>,
             "dispatcher must handle every EventPayload alternative with SimulationContext");
 

@@ -32,6 +32,8 @@ enum class EventPayloadKind : std::uint8_t {
     ChunkArrival = 2,
     TransmissionComplete = 3,
     LinkStateChange = 4,
+    PortStateChange = 5,
+    SwitchStateChange = 6,
 };
 
 enum class StopReason : std::uint8_t {

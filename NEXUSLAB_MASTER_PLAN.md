@@ -1309,6 +1309,9 @@ Do not proceed until the topology can support routing, failure injection, visual
 
 # Cluster 3 — Link, Queue, and Transfer Model
 
+**Status: Complete — 2026-09-05.** [Architecture Gate 3](docs/architecture-gates/cluster-3.md)
+records the acceptance checklist, test results, performance evidence, and scope boundaries.
+
 ## Objective
 
 Model data movement, service rate, buffering, latency, and congestion.
@@ -2888,6 +2891,10 @@ nexuslab simulate examples/clock.yaml
 ```
 
 ## Milestone 2 — Fabric MVP
+
+**Status: Complete — 2026-09-05.** Clusters 2 and 3 are gate-approved. Run
+`bash scripts/benchmark-transport.sh --pattern incast --flows 100` to demonstrate transfers
+across a generated Clos and report queue buildup and transfer outcomes.
 
 Includes:
 

@@ -50,6 +50,10 @@ const TransferChunk* DirectedLinkQueue::active() const noexcept {
     return active_.has_value() ? &*active_ : nullptr;
 }
 
+const TransferChunk* DirectedLinkQueue::next_waiting() const noexcept {
+    return waiting_.empty() ? nullptr : &waiting_.front();
+}
+
 QueueSnapshot DirectedLinkQueue::snapshot() const noexcept {
     return QueueSnapshot{
         ByteCount{waiting_bytes_}, waiting_.size(),     ByteCount{maximum_waiting_bytes_},

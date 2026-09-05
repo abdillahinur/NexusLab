@@ -11,7 +11,7 @@ The detailed scope, acceptance criteria, and gates are defined in [NEXUSLAB_MAST
 |---|---|---|---|
 | Foundation | 0 | Reproducible C++ build, tests, CI, tooling, and documentation | Complete — gate approved |
 | Simulation kernel | 1 | Deterministic event engine and measured baseline | Complete — gate approved |
-| Fabric MVP | 2–3 | Clos topology plus chunk-level links, queues, and transfers | Cluster 2 gate approved; Cluster 3 architecture accepted, implementation in progress |
+| Fabric MVP | 2–3 | Clos topology plus chunk-level links, queues, and transfers | Complete; Clusters 2 and 3 gates approved |
 | Routing comparison | 4 | ECMP, least-loaded, and queue-aware routing | Not started |
 | Training workload MVP | 5–6 | Synthetic jobs and Ring AllReduce | Not started |
 | Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Not started |

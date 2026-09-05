@@ -9,9 +9,10 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 
 > [!IMPORTANT]
 > NexusLab has completed Cluster 0 (Project Foundation), Cluster 1 (Deterministic Simulation Core),
-> and Cluster 2 (Topology and Cluster Model). Cluster 3 (Link, Queue, and Transfer Model) architecture
-> is accepted and implementation is beginning. NexusLab does not yet simulate data movement,
-> congestion, or training workloads, and no performance or realism claims are made at this stage.
+> Cluster 2 (Topology and Cluster Model), and Cluster 3 (Link, Queue, and Transfer Model).
+> Milestone 2 — Fabric MVP is complete: synthetic fixed-route transfers expose queue buildup,
+> drops, progress, and final outcomes. Routing policies and training workloads remain future work.
+> Measurements describe this simulator on the documented test host, not real hardware fidelity.
 
 ## Current foundation
 
@@ -27,7 +28,21 @@ NexusLab is a deterministic digital twin and experimentation platform for AI tra
 - deterministic direct, single-rack, leaf-spine, and Clos topology generators;
 - operational failure state, shortest-path queries, canonical YAML, Graphviz DOT, and topology
   summary inspection;
-- simulation-core and topology benchmark harnesses.
+- chunk-level fabric transfers with FIFO service, finite buffers, marking, and per-link counters;
+- transfer progress, exactly-once final outcomes, and link/port/switch failure reconciliation;
+- simulation-core, topology, and transport benchmark harnesses.
+
+The [Cluster 3 gate](docs/architecture-gates/cluster-3.md) records completion evidence.
+To transfer synthetic data across a generated 512-GPU Clos and observe queue buildup:
+
+```bash
+bash scripts/benchmark-transport.sh --pattern incast --flows 100
+```
+
+The output includes delivered/dropped bytes, successful/failed transfers, maximum waiting bytes,
+serializer busy time, event count, and peak RSS. Run `bash scripts/benchmark-transport-suite.sh`
+for the three-repeat scale and chunk-size matrix. These fixed-path benchmark harnesses are the
+Milestone 2 demo; a scenario-driven workload CLI belongs to later milestones.
 
 Dependency commits are pinned in `cmake/NexusLabDependencies.cmake`.
 

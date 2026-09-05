@@ -7,9 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved architecture through Cluster 2 and the accepted
-implementation direction for Cluster 3. Subsystem details will be added only as their implementation
-clusters reach review. The
+This document describes the gate-approved architecture through Cluster 3. Subsystem details will
+be added as their implementation clusters reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
 ## System boundary
@@ -116,8 +115,21 @@ service, and deterministically drop affected active and queued chunks without re
 
 See [ADR-003](docs/adr/ADR-003-chunk-level-transfers.md) for the fidelity decision and
 [ADR-006](docs/adr/ADR-006-link-queue-transfer-semantics.md) for queue admission, integer timing,
-event ordering, failure, progress, and validation semantics. This architecture is accepted for
-implementation but remains subject to Architecture Gate 3 measurements.
+event ordering, failure, progress, and validation semantics.
+[Architecture Gate 3](docs/architecture-gates/cluster-3.md) approves the implementation and records
+the transport scale measurements.
+
+Read-only transfer snapshots partition every registered byte and chunk into unscheduled, pending
+arrival, waiting, active, propagating, delivered, or reason-specific dropped states. A final outcome
+is retained and emitted once after every chunk becomes terminal; a drained event queue alone does
+not imply a successful transfer. Per-direction statistics count accepted, started, serialized,
+marked, and dropped traffic plus elapsed serializer busy time. Port and switch events use the same
+critical-priority reconciliation as link failures. Recovery admits new work without retrying drops.
+
+`TransportLimits` bounds retained chunks, route entries, and route length before allocation.
+Snapshots cost O(chunks in the transfer); terminal accounting is incremental. Completed records
+remain inspectable for the runtime lifetime, so experiments must fit the retained-state limits.
+Allocation or event-ID exhaustion terminates a run; rollback and resumption are not promised.
 
 ## Policy boundaries
 

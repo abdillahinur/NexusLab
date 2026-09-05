@@ -33,4 +33,16 @@ struct LinkStateChangeEvent final {
     bool operator==(const LinkStateChangeEvent&) const = default;
 };
 
+struct PortStateChangeEvent final {
+    topology::PortId port;
+    topology::OperationalState state;
+    bool operator==(const PortStateChangeEvent&) const = default;
+};
+
+struct SwitchStateChangeEvent final {
+    topology::SwitchId network_switch;
+    topology::OperationalState state;
+    bool operator==(const SwitchStateChangeEvent&) const = default;
+};
+
 } // namespace nexuslab::transport

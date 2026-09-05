@@ -125,6 +125,14 @@ class RuntimeDispatcher final {
         }
     }
 
+    void operator()(const PortStateChangeEvent& event, sim::SimulationContext& context) {
+        runtime_->handle_port_state_change(event, context);
+    }
+
+    void operator()(const SwitchStateChangeEvent& event, sim::SimulationContext& context) {
+        runtime_->handle_switch_state_change(event, context);
+    }
+
     [[nodiscard]] const std::vector<std::pair<ChunkId, sim::SimTimeNs>>&
     deliveries() const noexcept {
         return deliveries_;
