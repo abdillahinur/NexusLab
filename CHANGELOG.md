@@ -18,6 +18,8 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   label dimensions, and bounded deterministic counter, gauge, and fixed-histogram storage.
 - Per-run telemetry sessions with typed metric observations, stable record IDs, cross-domain
   correlations, mode-dependent retention, timestamp validation, and explicit record/edge limits.
+- Deterministic counter and gauge time-series sampling with equal-time boundary deferral, canonical
+  series order, final-boundary flushing, overflow-safe intervals, and bounded sample retention.
 
 - Milestone 5 / Cluster 7: optional non-preemptive scheduling and GPU placement.
 - Bounded resource inventory, validated atomic allocations, priority/arrival/ID waiting order,

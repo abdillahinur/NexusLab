@@ -147,6 +147,21 @@ TEST(TelemetryRegistryTest, DetectsCounterAndHistogramOverflowWithoutPartialMuta
     EXPECT_EQ(histogram.histogram_buckets.back(), 1U);
 }
 
+TEST(TelemetryRegistryTest, PreflightValidationNeverCreatesOrUpdatesSeries) {
+    MetricRegistry registry;
+    constexpr auto maximum = std::numeric_limits<std::uint64_t>::max();
+
+    EXPECT_NO_THROW(registry.validate_increment(MetricId::SimulationDispatchedEvents, {}, maximum));
+    EXPECT_NO_THROW(registry.validate_set_gauge(MetricId::SimulationFinalTimeNs, {}, 12));
+    EXPECT_NO_THROW(registry.validate_observe(MetricId::JobCompletionTimeNs, {}, maximum));
+    EXPECT_EQ(registry.size(), 0U);
+
+    registry.increment(MetricId::SimulationDispatchedEvents, {}, maximum);
+    EXPECT_THROW(registry.validate_increment(MetricId::SimulationDispatchedEvents),
+                 std::overflow_error);
+    EXPECT_EQ(required(registry.find(MetricId::SimulationDispatchedEvents)).scalar, maximum);
+}
+
 TEST(TelemetryRegistryTest, SeparateRunRegistriesStartEmpty) {
     MetricRegistry first;
     first.increment(MetricId::SimulationDispatchedEvents, {}, 9);

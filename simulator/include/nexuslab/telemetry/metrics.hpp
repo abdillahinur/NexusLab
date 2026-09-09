@@ -215,6 +215,11 @@ class MetricRegistry final {
     void set_gauge(MetricId metric, const MetricLabels& labels, std::uint64_t value);
     void observe(MetricId metric, const MetricLabels& labels, std::uint64_t value);
 
+    void validate_increment(MetricId metric, const MetricLabels& labels = {},
+                            std::uint64_t amount = 1) const;
+    void validate_set_gauge(MetricId metric, const MetricLabels& labels, std::uint64_t value) const;
+    void validate_observe(MetricId metric, const MetricLabels& labels, std::uint64_t value) const;
+
     [[nodiscard]] std::optional<MetricSeriesSnapshot> find(MetricId metric,
                                                            const MetricLabels& labels = {}) const;
     [[nodiscard]] std::vector<MetricSeriesSnapshot> snapshots() const;

@@ -347,6 +347,23 @@ struct MetricRegistry::Impl final {
 
     [[nodiscard]] MetricSeriesState& require_series(MetricId metric, const MetricLabels& labels,
                                                     MetricKind expected) {
+        static_cast<void>(validate_series(metric, labels, expected));
+        const MetricSeriesKey key{metric, labels};
+        const auto found = series.find(key);
+        if (found != series.end()) {
+            return found->second;
+        }
+
+        MetricSeriesState state{expected, 0, {}, 0, 0};
+        if (expected == MetricKind::Histogram) {
+            const MetricDefinition& definition = metric_definition(metric);
+            state.histogram_buckets.resize(definition.histogram_boundaries.size() + 1);
+        }
+        return series.emplace(key, std::move(state)).first->second;
+    }
+
+    [[nodiscard]] const MetricSeriesState*
+    validate_series(MetricId metric, const MetricLabels& labels, MetricKind expected) const {
         const MetricDefinition& definition = metric_definition(metric);
         validate_labels(definition, labels);
         if (definition.kind != expected) {
@@ -356,17 +373,12 @@ struct MetricRegistry::Impl final {
         const MetricSeriesKey key{metric, labels};
         const auto found = series.find(key);
         if (found != series.end()) {
-            return found->second;
+            return &found->second;
         }
         if (series.size() >= maximum_series) {
             throw std::length_error{"telemetry metric series limit exceeded"};
         }
-
-        MetricSeriesState state{expected, 0, {}, 0, 0};
-        if (expected == MetricKind::Histogram) {
-            state.histogram_buckets.resize(definition.histogram_boundaries.size() + 1);
-        }
-        return series.emplace(key, std::move(state)).first->second;
+        return nullptr;
     }
 
     [[nodiscard]] std::optional<MetricSeriesSnapshot>
@@ -418,6 +430,38 @@ void MetricRegistry::observe(MetricId metric, const MetricLabels& labels, std::u
     series.histogram_buckets[bucket] = next_bucket;
     series.histogram_count = next_count;
     series.histogram_sum = next_sum;
+}
+
+void MetricRegistry::validate_increment(MetricId metric, const MetricLabels& labels,
+                                        std::uint64_t amount) const {
+    const MetricSeriesState* const series =
+        implementation_->validate_series(metric, labels, MetricKind::Counter);
+    if (series != nullptr) {
+        static_cast<void>(checked_add(series->scalar, amount));
+    }
+}
+
+void MetricRegistry::validate_set_gauge(MetricId metric, const MetricLabels& labels,
+                                        std::uint64_t value) const {
+    static_cast<void>(value);
+    static_cast<void>(implementation_->validate_series(metric, labels, MetricKind::Gauge));
+}
+
+void MetricRegistry::validate_observe(MetricId metric, const MetricLabels& labels,
+                                      std::uint64_t value) const {
+    const MetricSeriesState* const series =
+        implementation_->validate_series(metric, labels, MetricKind::Histogram);
+    if (series == nullptr) {
+        return;
+    }
+    const MetricDefinition& definition = metric_definition(metric);
+    const auto bucket =
+        static_cast<std::size_t>(std::lower_bound(definition.histogram_boundaries.begin(),
+                                                  definition.histogram_boundaries.end(), value) -
+                                 definition.histogram_boundaries.begin());
+    static_cast<void>(checked_add(series->histogram_buckets[bucket], 1));
+    static_cast<void>(checked_add(series->histogram_count, 1));
+    static_cast<void>(checked_add(series->histogram_sum, value));
 }
 
 std::optional<MetricSeriesSnapshot> MetricRegistry::find(MetricId metric,

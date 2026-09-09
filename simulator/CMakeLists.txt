@@ -10,6 +10,7 @@ add_library(
     src/sim/trace.cpp
     src/telemetry/metrics.cpp
     src/telemetry/records.cpp
+    src/telemetry/samples.cpp
     src/telemetry/session.cpp
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
@@ -68,6 +69,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/simulation_test.cpp
         tests/trace_test.cpp
         tests/telemetry_metrics_test.cpp
+        tests/telemetry_sampling_test.cpp
         tests/telemetry_session_test.cpp
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp

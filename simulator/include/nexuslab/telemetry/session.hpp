@@ -4,6 +4,7 @@
 #pragma once
 
 #include "nexuslab/telemetry/records.hpp"
+#include "nexuslab/telemetry/samples.hpp"
 
 #include <memory>
 #include <optional>
@@ -43,12 +44,15 @@ class TelemetrySession final {
     [[nodiscard]] TelemetrySink sink() noexcept;
 
     void record(sim::SimTimeNs timestamp, Correlation correlation, MetricObservation observation);
+    void finalize(sim::SimTimeNs timestamp);
 
     [[nodiscard]] std::optional<MetricSeriesSnapshot>
     find_metric(MetricId metric, const MetricLabels& labels = {}) const;
     [[nodiscard]] std::vector<MetricSeriesSnapshot> metric_snapshots() const;
     [[nodiscard]] std::span<const TelemetryRecord> records() const noexcept;
+    [[nodiscard]] std::span<const MetricSample> samples() const noexcept;
     [[nodiscard]] std::size_t retained_correlation_edges() const noexcept;
+    [[nodiscard]] bool finalized() const noexcept;
 
   private:
     struct Impl;
