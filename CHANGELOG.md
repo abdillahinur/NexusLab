@@ -14,6 +14,8 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - Accepted Cluster 8's deterministic telemetry architecture: per-run collection modes, typed
   correlation, versioned metrics, non-perturbing samples, bounded retention, and canonical JSON
   boundaries with Protobuf still deferred to Cluster 12.
+- Cluster 8 telemetry modes and limits, a versioned metric catalog with explicit kinds, units and
+  label dimensions, and bounded deterministic counter, gauge, and fixed-histogram storage.
 
 - Milestone 5 / Cluster 7: optional non-preemptive scheduling and GPU placement.
 - Bounded resource inventory, validated atomic allocations, priority/arrival/ID waiting order,
