@@ -205,3 +205,8 @@ bash scripts/benchmark-scheduling-suite.sh
 The [scheduling guide](docs/scheduling.md) explains policies, priorities, backfill and failure semantics.
 [Gate 7](docs/architecture-gates/cluster-7.md) and the
 [comparison baseline](docs/benchmarks/cluster-7-scheduling-baseline.md) record validation and measured results.
+
+Cluster 8 is now in progress. [ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md)
+defines the accepted per-run telemetry modes, typed correlations, metric catalog, deterministic
+sampling, bounded retention, and versioned JSON/JSONL boundary. Implementation and Gate 8 remain
+pending; protobuf and durable replay packaging are still deferred to Cluster 12.

@@ -7,8 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved architecture through Cluster 6. Subsystem details will
-be added as their implementation clusters reach review. The
+This document describes the gate-approved implementation through Cluster 7 and the accepted
+Cluster 8 telemetry architecture. Subsystem details will be added as their implementation clusters
+reach review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
 ## System boundary
@@ -216,6 +217,30 @@ leave explicit waiting results. Decision records include locality and free-rack 
 retention limits bound both decision count and cumulative allocation IDs. Policies receive a borrowed
 span, never a graph/runtime copy. See [ADR-010](docs/adr/ADR-010-scheduler-placement-boundary.md),
 [Gate 7](docs/architecture-gates/cluster-7.md), and [scheduling guide](docs/scheduling.md).
+
+## Cluster 8 telemetry architecture
+
+Cluster 8 introduces one per-run telemetry session outside the event queue. Domain subsystems emit
+typed post-transition observations through a non-mutating sink; telemetry cannot schedule events,
+draw randomness, invoke policies, or own runtime state. Existing kernel traces, snapshots, timelines,
+and decision records are inputs to this integration rather than competing durable logs.
+
+Four modes provide explicit cost/detail levels: off, incremental summary, sampled summary with
+decisions, and full domain plus kernel trace. Sampling treats observed gauges as piecewise constant
+and never schedules simulation events, so changing telemetry detail cannot consume event IDs or
+alter domain outcomes. Every retained record receives a deterministic sequence and typed optional
+correlations across events, jobs, collectives, transfers, chunks, links, decisions, and failures.
+
+A versioned metric catalog fixes names, units, kinds, bounded labels, and histogram boundaries.
+The same summary builder consumes observations in every enabled mode; rebuilding a summary from a
+complete trace must reproduce the live canonical summary byte-for-byte. Limits are validated and
+exhaustion fails explicitly rather than silently truncating required data.
+
+Cluster 8 uses canonical JSON summaries and JSON Lines telemetry records. Protobuf, compression,
+durable result packaging, databases, and dashboard transport remain deferred to Cluster 12. See
+[ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md) for schema, sampling, attribution,
+retention, compatibility, and validation decisions. Implementation and Architecture Gate 8 are
+still pending.
 
 ## Policy boundaries
 

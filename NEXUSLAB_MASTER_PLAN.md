@@ -3493,7 +3493,7 @@ The value is that it demonstrates disciplined engineering across architecture, s
 | 5 | Training Workload Engine | Complete | Yes |
 | 6 | Collective Communication Engine | Complete | Yes |
 | 7 | Scheduler and GPU Placement | Complete | Yes |
-| 8 | Telemetry and Observability | Not Started | No |
+| 8 | Telemetry and Observability | In Progress — architecture accepted | No |
 | 9 | Failure Injection and Recovery | Not Started | No |
 | 10 | Congestion-Control Framework | Not Started | No |
 | 11 | Experiment Orchestrator | Not Started | No |

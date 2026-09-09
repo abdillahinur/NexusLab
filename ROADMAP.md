@@ -15,7 +15,7 @@ The detailed scope, acceptance criteria, and gates are defined in [NEXUSLAB_MAST
 | Routing comparison | 4 | ECMP, least-loaded, and queue-aware routing | Complete; Cluster 4 gate approved |
 | Training workload MVP | 5–6 | Synthetic jobs and Ring AllReduce | Complete; Clusters 5 and 6 gates approved |
 | Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Complete; Cluster 7 gate approved |
-| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Not started |
+| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Cluster 8 architecture accepted; implementation not started |
 | Experiment platform | 11–12 | Reproducible matrices, results, and replay | Not started |
 | Portfolio dashboard | 13 | Replay-only explanatory dashboard | Not started |
 | Advanced controllers | 10 | Congestion-control experiments | Not started |
