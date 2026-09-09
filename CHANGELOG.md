@@ -16,6 +16,8 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   boundaries with Protobuf still deferred to Cluster 12.
 - Cluster 8 telemetry modes and limits, a versioned metric catalog with explicit kinds, units and
   label dimensions, and bounded deterministic counter, gauge, and fixed-histogram storage.
+- Per-run telemetry sessions with typed metric observations, stable record IDs, cross-domain
+  correlations, mode-dependent retention, timestamp validation, and explicit record/edge limits.
 
 - Milestone 5 / Cluster 7: optional non-preemptive scheduling and GPU placement.
 - Bounded resource inventory, validated atomic allocations, priority/arrival/ID waiting order,
