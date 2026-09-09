@@ -7,14 +7,19 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved implementation through Cluster 7 and the accepted
-Cluster 8 telemetry architecture. Subsystem details will be added as their implementation clusters
-reach review. The
+This document describes the gate-approved implementation through Cluster 7, the accepted Cluster 8
+telemetry architecture, and the explicitly pending NexusBench/research/adoption boundaries. Pending
+Cluster 24, Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-approved;
+subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
 ## System boundary
 
-NexusLab is a single-process, deterministic discrete-event simulator for comparative experiments on synthetic AI training infrastructure. The simulation core must remain usable without the future web backend. Production integrations are future backend adapters and must not leak simulated internals into controller interfaces.
+NexusLab is the open, single-process, deterministic counterfactual experimentation lab for
+synthetic AI training infrastructure. NexusBench is the versioned benchmark/research standard built
+on its scenario, policy, metric, repeat, and digest contracts. The simulation core must remain usable
+without the future web backend. Production integrations are future backend adapters and must not
+leak simulated internals into policy interfaces.
 
 ## Planned component flow
 
@@ -26,7 +31,8 @@ scenario definition
   -> pluggable policy layer
   -> telemetry and metrics
   -> result store and replay
-  -> CLI, reports, and replay dashboard
+  -> NexusBench frozen suites, policy submissions, scoring, and receipts
+  -> CLI, attribution reports, shadow/advisory audit, and replay dashboard
 ```
 
 ## Approved initial decisions
@@ -46,13 +52,17 @@ scenario definition
 | Initial topology | Clos |
 | Scale targets | 512 GPUs initial; 2,048 stretch |
 | Initial collective | Ring AllReduce |
+| Research identity | NexusBench: frozen, versioned, reproducible policy-comparison suites |
+| NexusBench-v0 tracks | Routing and placement, with two baseline policies per track |
+| Required scientific-release workload expansion | DP, TP, PP, and EP traffic models after ADR-014 |
 | MVP routing | ECMP, least-loaded, queue-aware |
 | Initial scheduler | First fit |
 | Anchor failure | Spine-link failure |
 | Headline metrics | Job completion time, GPU idle time, queue depth, link utilization, drops |
 | First UI release | Replay only; no live streaming or cluster control |
+| Required scientific evidence | Verified NexusBench-v0 plus one receipt-backed reference study |
 | Performance thresholds | Local post-baseline guardrails defined by architecture gates |
-| Portfolio-ready MVP target | 16 weeks, subordinate to architecture-gate quality |
+| Scientific-release planning target | 16 weeks, subordinate to architecture-gate quality |
 | License | Apache-2.0 |
 
 ## Determinism boundary
@@ -242,16 +252,92 @@ durable result packaging, databases, and dashboard transport remain deferred to 
 retention, compatibility, and validation decisions. Implementation and Architecture Gate 8 are
 still pending.
 
+## Pending NexusBench, research, and adoption architecture
+
+These boundaries are plan commitments, not approved implementation facts:
+
+- **Clusters 24 and 15 / ADR-012 and ADR-013:** define a frozen NexusBench-v0 suite manifest,
+  canonical scenario/result digest rules, static C++ policy submission SDK, conformance checks,
+  metric/scoring contract, three-repeat harness, repository-native result format, citation receipt,
+  and explicit suite-evolution rules. V0 includes only routing and placement tracks.
+- **Cluster 20 / ADR-014:** extend the workload/collective contracts with explicit DP, TP, PP, and
+  EP groups and dependencies. Ring remains supported. Planners emit collective, point-to-point, and
+  AllToAll-shaped work without owning routing. Telemetry adds pipeline bubble, collective/pipeline
+  wait, communication-caused idle, and parallel-group traffic for the planned NB-Collective track.
+- **Cluster 21 / ADR-015:** extend topology identity with node, high-bandwidth domain, rail, and link
+  class. Read-only routing and placement views expose rail locality; Cluster 9 failure semantics
+  extend to rail, NIC, domain degradation, and rail-plus-spine combinations. Fidelity remains
+  behavioral and chunk-level, not Verbs/RDMA or exact NVLink/IB/RoCE simulation.
+- **Cluster 22 / ADR-016:** isolate NCCL-like logs, nsys-like timelines, and later DCGM/Prometheus-
+  style source mappings behind a NexusLab-owned canonical intermediate schema. Imports preserve
+  source, importer, schema, anonymization/provenance, and content digests; reconstructed work replays
+  under declared policy overrides while its digest stays fixed.
+- **Cluster 23:** consume Clusters 11–12, 14, 20–22, and 24 to publish the first NexusBench case study
+  with immutable run receipts. No report file receives numbers before real complete runs verify.
+- **Cluster 16 / ADR-017:** define backend-neutral observations, ordered candidates, policy decisions,
+  advisory mappings, safety capabilities, and audit records. Simulation, trace replay, and mock
+  shadow adapters use the same policy artifact. Every decision remains non-applied.
+- **Cluster 14 / ADR-018:** layer reproducible attribution/counterfactual deltas over NexusBench runs;
+  later add held-out policy-ranking correlation with disagreement cases for Adoption Stage 3.
+- **Cluster 17 / future ADR:** consider multi-fidelity execution only after measured NexusBench matrix
+  cost justifies it. It is neither a v0 dependency nor permission to weaken digest comparability.
+
+The planned dependency flow is:
+
+```text
+Clusters 8–9 telemetry/failures
+  -> Clusters 11–12 manifests, digests, and replay
+  -> Clusters 15 + 24 NexusBench policy/specification/harness (Stage 0)
+  -> Cluster 20 parallelism
+  -> Cluster 21 heterogeneous multi-rail fabric
+  -> Cluster 22 trace import and trace-driven replay (Stage 1)
+  -> Cluster 23 measured NexusBench reference study + Cluster 14 attribution
+  -> Cluster 16 mock shadow/advisory boundary (Stage 2)
+  -> Cluster 13 replay dashboard consumer
+
+Later: Cluster 14 held-out design-partner calibration (Stage 3) -> partner advisory workflow (Stage 4)
+```
+
+Cluster numbers are stable ownership identifiers, so Cluster 24 intentionally executes before
+Cluster 20. Only one implementation cluster is active at a time. ADR-012 through ADR-018 are
+reserved and must be accepted before their owning implementations begin; ADR-018 is later Stage 3
+work and is not a NexusBench-v0 blocker.
+
 ## Policy boundaries
 
 Routing, scheduling, congestion control, collective planning, and failure recovery will use stable replaceable interfaces. Policies receive bounded views or snapshots, do not mutate simulation state directly, and emit inspectable decision records.
 
+NexusBench policies use a static C++20 submission boundary in v0. A policy artifact declares its
+version and capabilities, receives only immutable public domain views, and cannot depend on the event
+queue, simulator clock/RNG, mutable graph ownership, or source-adapter internals. The same artifact
+is intended to consume equivalent backend-neutral observations in Cluster 16. Runtime untrusted
+plugins and hosted submissions remain later security work.
+
+## NexusBench reproducibility boundary
+
+A benchmark result is comparable only when suite/scenario pack, topology/workload/failure inputs,
+seed, simulator, metric catalog, and all non-policy locked dimensions match by canonical digest.
+Policy artifact/configuration and outcome have separate digests. Frozen scenarios cannot be edited
+in place after suite publication; behavior-changing edits require a new suite version. Failed and
+missing cells remain explicit. V0 results are synthetic and repository-native rather than a hosted
+leaderboard.
+
 ## Data and safety boundaries
 
 - Initial workloads and results are synthetic.
+- Imported workloads are trace-derived approximations and never imply bit-exact NCCL, kernel, or
+  RDMA behavior.
 - The initial release replays completed experiments and does not control a live cluster.
+- Scientific-release shadow mode uses only mock recorded/generated observations and cannot apply actions.
+- Shadow audit records include observation, ordered candidates, decision, `would_apply`, and
+  `applied=false`; allowlist, dry-run, rate-limit, and human-approval concepts do not create an apply
+  capability.
+- Operator-facing placement, routing, collective, and scheduler outputs remain recommendations.
 - Scenario sizes and inputs must be validated before allocations occur.
-- Any future real-cluster action requires an explicit operating mode and independent safety controls.
+- Design-partner traces require documented anonymization, ownership, license, retention, and NDA
+  constraints. Adoption-ready remains open until the required partner/calibration evidence exists.
+- Any future real-cluster action requires a separate operating mode, safety ADR, independent
+  controls, and authorization outside the scientific release.
 
 ## Cluster 0 repository shape
 
