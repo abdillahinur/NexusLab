@@ -11,6 +11,7 @@ add_library(
     src/telemetry/metrics.cpp
     src/telemetry/records.cpp
     src/telemetry/samples.cpp
+    src/telemetry/summary.cpp
     src/telemetry/session.cpp
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
@@ -73,6 +74,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/telemetry_metrics_test.cpp
         tests/telemetry_records_test.cpp
         tests/telemetry_sampling_test.cpp
+        tests/telemetry_summary_test.cpp
         tests/telemetry_session_test.cpp
         tests/telemetry_integration_test.cpp
         tests/transport_event_test.cpp

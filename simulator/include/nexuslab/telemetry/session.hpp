@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include "nexuslab/telemetry/records.hpp"
 #include "nexuslab/telemetry/samples.hpp"
+#include "nexuslab/telemetry/summary.hpp"
 
 #include <memory>
 #include <optional>
@@ -50,6 +50,7 @@ class TelemetrySession final {
     [[nodiscard]] std::optional<MetricSeriesSnapshot>
     find_metric(MetricId metric, const MetricLabels& labels = {}) const;
     [[nodiscard]] std::vector<MetricSeriesSnapshot> metric_snapshots() const;
+    [[nodiscard]] std::vector<JobAttributionSnapshot> job_attributions() const;
     [[nodiscard]] std::span<const TelemetryRecord> records() const noexcept;
     [[nodiscard]] std::span<const MetricSample> samples() const noexcept;
     [[nodiscard]] std::size_t retained_correlation_edges() const noexcept;

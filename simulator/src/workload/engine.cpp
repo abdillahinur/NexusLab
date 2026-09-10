@@ -220,6 +220,9 @@ void WorkloadEngine::compute_ready(Record& record, const WorkloadEvent& event,
     }
     if (event.bucket == record.buckets - 1) {
         ++record.compute_complete;
+        if (record.compute_complete == 1 && record.spec.workers.size() > 1) {
+            emit_job(record, telemetry::JobTransition::StragglerStarted, context, event.worker);
+        }
     }
     if (record.compute_complete == record.spec.workers.size()) {
         if (record.active_collective.has_value()) {

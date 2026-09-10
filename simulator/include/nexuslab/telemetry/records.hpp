@@ -108,6 +108,8 @@ enum class JobTransition : std::uint8_t {
     Succeeded = 9,
     Failed = 10,
     Cancelled = 11,
+    SynchronizationStarted = 12,
+    StragglerStarted = 13,
 };
 
 struct JobObservation final {

@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 #include <utility>
 
 namespace nexuslab::telemetry {
@@ -19,36 +18,6 @@ namespace {
     return left + right;
 }
 
-void apply_observation(MetricRegistry& metrics, const TelemetryObservation& observation) {
-    std::visit(
-        [&metrics](const auto& value) {
-            using Observation = std::remove_cvref_t<decltype(value)>;
-            if constexpr (std::is_same_v<Observation, CounterObservation>) {
-                metrics.increment(value.metric, value.labels, value.amount);
-            } else if constexpr (std::is_same_v<Observation, GaugeObservation>) {
-                metrics.set_gauge(value.metric, value.labels, value.value);
-            } else if constexpr (std::is_same_v<Observation, HistogramObservation>) {
-                metrics.observe(value.metric, value.labels, value.value);
-            }
-        },
-        observation);
-}
-
-void validate_observation(const MetricRegistry& metrics, const TelemetryObservation& observation) {
-    std::visit(
-        [&metrics](const auto& value) {
-            using Observation = std::remove_cvref_t<decltype(value)>;
-            if constexpr (std::is_same_v<Observation, CounterObservation>) {
-                metrics.validate_increment(value.metric, value.labels, value.amount);
-            } else if constexpr (std::is_same_v<Observation, GaugeObservation>) {
-                metrics.validate_set_gauge(value.metric, value.labels, value.value);
-            } else if constexpr (std::is_same_v<Observation, HistogramObservation>) {
-                metrics.validate_observe(value.metric, value.labels, value.value);
-            }
-        },
-        observation);
-}
-
 } // namespace
 
 struct TelemetrySession::Impl final {
@@ -56,7 +25,7 @@ struct TelemetrySession::Impl final {
         : configuration{value}, next_sample_timestamp{sim::SimTimeNs{value.sample_interval_ns}} {
         validate_configuration(configuration);
         if (configuration.mode != TelemetryMode::Off) {
-            metrics = std::make_unique<MetricRegistry>(configuration.limits.metric_series);
+            summary = std::make_unique<SummaryBuilder>(configuration.limits.metric_series);
         }
     }
 
@@ -93,9 +62,9 @@ struct TelemetrySession::Impl final {
             }
         }
 
-        validate_observation(*metrics, observation);
+        summary->validate(timestamp, correlation, observation);
         emit_samples_until(timestamp, false);
-        apply_observation(*metrics, observation);
+        summary->consume(timestamp, correlation, observation);
         if (retain) {
             const TelemetryRecordId id{next_record_id};
             records.push_back(TelemetryRecord{correlation, std::move(observation), id, timestamp});
@@ -123,6 +92,9 @@ struct TelemetrySession::Impl final {
             throw std::invalid_argument{"telemetry final timestamp regressed"};
         }
         emit_samples_until(timestamp, true);
+        if (summary) {
+            summary->finalize(timestamp);
+        }
         last_timestamp = timestamp;
         is_finalized = true;
     }
@@ -131,7 +103,7 @@ struct TelemetrySession::Impl final {
         if (!retains_samples()) {
             return;
         }
-        const std::vector<MetricSeriesSnapshot> snapshots = metrics->snapshots();
+        const std::vector<MetricSeriesSnapshot> snapshots = summary->metric_snapshots();
         const bool has_sampled_series =
             std::any_of(snapshots.begin(), snapshots.end(), [](const MetricSeriesSnapshot& sample) {
                 return is_sampled_metric_kind(sample.kind);
@@ -171,7 +143,7 @@ struct TelemetrySession::Impl final {
     }
 
     void append_sample_frame(sim::SimTimeNs timestamp) {
-        const std::vector<MetricSeriesSnapshot> snapshots = metrics->snapshots();
+        const std::vector<MetricSeriesSnapshot> snapshots = summary->metric_snapshots();
         const auto sample_count = static_cast<std::size_t>(std::count_if(
             snapshots.begin(), snapshots.end(), [](const MetricSeriesSnapshot& snapshot) {
                 return is_sampled_metric_kind(snapshot.kind);
@@ -205,7 +177,7 @@ struct TelemetrySession::Impl final {
     }
 
     TelemetryConfiguration configuration;
-    std::unique_ptr<MetricRegistry> metrics;
+    std::unique_ptr<SummaryBuilder> summary;
     std::vector<TelemetryRecord> records;
     std::vector<MetricSample> samples;
     std::optional<sim::SimTimeNs> last_timestamp;
@@ -254,14 +226,21 @@ TelemetrySession::find_metric(MetricId metric, const MetricLabels& labels) const
     if (!enabled()) {
         return std::nullopt;
     }
-    return implementation_->metrics->find(metric, labels);
+    return implementation_->summary->find_metric(metric, labels);
 }
 
 std::vector<MetricSeriesSnapshot> TelemetrySession::metric_snapshots() const {
     if (!enabled()) {
         return {};
     }
-    return implementation_->metrics->snapshots();
+    return implementation_->summary->metric_snapshots();
+}
+
+std::vector<JobAttributionSnapshot> TelemetrySession::job_attributions() const {
+    if (!enabled()) {
+        return {};
+    }
+    return implementation_->summary->job_attributions();
 }
 
 std::span<const TelemetryRecord> TelemetrySession::records() const noexcept {

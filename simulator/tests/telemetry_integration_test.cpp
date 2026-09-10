@@ -325,7 +325,7 @@ TEST(TelemetryIntegrationTest, TrainingRunCorrelatesPlacementJobCollectiveRouteA
     workload::JobSpec specification;
     specification.name = "telemetry-training";
     specification.requested_workers = 2;
-    specification.compute = {sim::SimDurationNs{1'000}, sim::SimDurationNs{1'000}};
+    specification.compute = {sim::SimDurationNs{1'000}, sim::SimDurationNs{1'500}};
     specification.gradient_bytes = transport::ByteCount{100};
     specification.bucket_bytes = transport::ByteCount{100};
     specification.chunk_bytes = transport::ByteCount{100};
@@ -340,6 +340,10 @@ TEST(TelemetryIntegrationTest, TrainingRunCorrelatesPlacementJobCollectiveRouteA
     const auto completion = required(telemetry.find_metric(MetricId::JobCompletionTimeNs));
     EXPECT_EQ(completion.histogram_count, 1U);
     EXPECT_EQ(completion.histogram_sum, snapshot.elapsed_ns);
+    ASSERT_EQ(telemetry.job_attributions().size(), 1U);
+    EXPECT_EQ(telemetry.job_attributions().front().straggler_delay_ns, 500U);
+    EXPECT_EQ(telemetry.job_attributions().front().accounted_ns(), snapshot.elapsed_ns);
+    EXPECT_EQ(required(telemetry.find_metric(MetricId::JobStragglerDelayNs)).scalar, 500U);
     EXPECT_EQ(required(telemetry.find_metric(MetricId::CollectivePlannedBytes)).scalar, 200U);
     EXPECT_EQ(required(telemetry.find_metric(
                            MetricId::RoutingDecisionTotal,
@@ -389,6 +393,14 @@ TEST(TelemetryIntegrationTest, TrainingRunCorrelatesPlacementJobCollectiveRouteA
     EXPECT_TRUE(collective_to_transfer);
     EXPECT_TRUE(decision_to_transfer);
     EXPECT_TRUE(placement_to_job);
+
+    SummaryBuilder rebuilt;
+    for (const TelemetryRecord& record : telemetry.records()) {
+        rebuilt.consume(record.timestamp, record.correlation, record.observation);
+    }
+    rebuilt.finalize(result.final_time);
+    EXPECT_EQ(rebuilt.metric_snapshots(), telemetry.metric_snapshots());
+    EXPECT_EQ(rebuilt.job_attributions(), telemetry.job_attributions());
 }
 
 } // namespace
