@@ -21,6 +21,7 @@ add_library(
     src/scheduling/inventory.cpp
     src/scheduling/policy.cpp
     src/workload/scheduling.cpp
+    src/workload/digest.cpp
     src/workload/run.cpp
     src/workload/scenario.cpp
     src/workload/model.cpp
@@ -76,6 +77,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/telemetry_records_test.cpp
         tests/telemetry_sampling_test.cpp
         tests/telemetry_serialization_test.cpp
+        tests/telemetry_validation_test.cpp
         tests/telemetry_summary_test.cpp
         tests/telemetry_session_test.cpp
         tests/telemetry_integration_test.cpp
@@ -167,6 +169,22 @@ if(NEXUSLAB_BUILD_BENCHMARKS)
     if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         add_test(NAME nexuslab_transport_benchmark_smoke COMMAND nexuslab_transport_benchmarks --flows 2)
         set_tests_properties(nexuslab_transport_benchmark_smoke PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=transport")
+    endif()
+    add_executable(nexuslab_telemetry_benchmarks benchmarks/telemetry_benchmark.cpp)
+    target_link_libraries(
+        nexuslab_telemetry_benchmarks
+        PRIVATE NexusLab::core nexuslab_project_options
+    )
+    nexuslab_enable_clang_tidy(nexuslab_telemetry_benchmarks)
+    if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
+        add_test(
+            NAME nexuslab_telemetry_benchmark_smoke
+            COMMAND nexuslab_telemetry_benchmarks --mode summary
+        )
+        set_tests_properties(
+            nexuslab_telemetry_benchmark_smoke
+            PROPERTIES PASS_REGULAR_EXPRESSION "benchmark=telemetry_overhead"
+        )
     endif()
     add_executable(nexuslab_benchmarks benchmarks/simulation_benchmark.cpp)
     target_link_libraries(nexuslab_benchmarks PRIVATE NexusLab::core nexuslab_project_options)

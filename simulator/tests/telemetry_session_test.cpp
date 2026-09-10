@@ -146,17 +146,23 @@ TEST(TelemetrySessionTest, InvalidMetricUpdateDoesNotConsumeRecordIdentity) {
     EXPECT_EQ(session.records().front().id, TelemetryRecordId{0});
 }
 
-TEST(TelemetrySessionTest, NewRunStartsWithEmptyMetricsRecordsAndIds) {
+TEST(TelemetrySessionTest, ConcurrentIndependentSessionsDoNotShareState) {
     TelemetryConfiguration configuration;
     configuration.mode = TelemetryMode::Full;
     TelemetrySession first{configuration};
     first.record(sim::SimTimeNs{4}, {}, dispatched(9));
     TelemetrySession second{configuration};
     second.record(sim::SimTimeNs{1}, {}, dispatched());
+    first.record(sim::SimTimeNs{8}, {}, dispatched(2));
+    second.finalize(sim::SimTimeNs{2});
+    first.finalize(sim::SimTimeNs{8});
 
-    EXPECT_EQ(required(first.find_metric(MetricId::SimulationDispatchedEvents)).scalar, 9U);
+    EXPECT_EQ(required(first.find_metric(MetricId::SimulationDispatchedEvents)).scalar, 11U);
     EXPECT_EQ(required(second.find_metric(MetricId::SimulationDispatchedEvents)).scalar, 1U);
     EXPECT_EQ(second.records().front().id, TelemetryRecordId{0});
+    EXPECT_EQ(first.records()[1].id, TelemetryRecordId{1});
+    EXPECT_TRUE(first.finalized());
+    EXPECT_TRUE(second.finalized());
 }
 
 } // namespace

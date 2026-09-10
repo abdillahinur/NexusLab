@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 NexusLab contributors
 // SPDX-License-Identifier: Apache-2.0
-#include "nexuslab/workload/run.hpp"
+#include "nexuslab/workload/digest.hpp"
 #include <algorithm>
 #include <charconv>
 #include <chrono>
@@ -109,38 +109,6 @@ std::uint64_t peak_rss() {
     }
     throw std::runtime_error{"Linux RSS unavailable"};
 }
-void hash_field(std::uint64_t& hash, std::uint64_t value) {
-    for (unsigned shift = 0; shift < 64; shift += 8) {
-        hash ^= (value >> shift) & 255U;
-        hash *= 1099511628211ULL;
-    }
-}
-std::uint64_t digest(const workload::TrainingReport& report) {
-    std::uint64_t hash{14695981039346656037ULL};
-    for (const auto& job : report.jobs) {
-        for (const auto value : {job.id.value(), static_cast<std::uint64_t>(job.state),
-                                 static_cast<std::uint64_t>(job.completed_steps), job.elapsed_ns,
-                                 job.compute_gpu_ns, job.idle_gpu_ns}) {
-            hash_field(hash, value);
-        }
-    }
-    for (const auto& c : report.collectives) {
-        for (const auto value : {c.id.value(), static_cast<std::uint64_t>(c.outcome),
-                                 c.started.count(), c.finished.count(), c.planned_bytes,
-                                 c.issued_fabric_bytes, c.issued_local_bytes, c.delivered_bytes}) {
-            hash_field(hash, value);
-        }
-    }
-    for (const auto& r : report.decisions) {
-        hash_field(hash, r.request.flow);
-        hash_field(hash, r.timestamp.count());
-        for (const auto hop : r.path) {
-            hash_field(hash, hop.link.value());
-            hash_field(hash, static_cast<std::uint64_t>(hop.direction));
-        }
-    }
-    return hash;
-}
 void train(const Options& options) {
     workload::TrainingScenario scenario;
     const auto nic_count =
@@ -192,7 +160,7 @@ void train(const Options& options) {
               << "\nmaximum_waiting_bytes=" << report.maximum_waiting_bytes
               << "\nroute_decisions=" << report.decisions.size()
               << "\ncollectives=" << report.collectives.size()
-              << "\ndomain_digest=" << digest(report) << '\n';
+              << "\ndomain_digest=" << workload::domain_outcome_digest(report) << '\n';
 }
 void planning(const Options& options) {
     if (options.workers < 2) {

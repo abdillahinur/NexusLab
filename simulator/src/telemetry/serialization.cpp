@@ -748,6 +748,12 @@ std::string_view run_outcome_name(TelemetryRunOutcome outcome) {
     throw std::invalid_argument{"unknown telemetry run outcome"};
 }
 
+void require_supported_schema_version(std::uint32_t version) {
+    if (version != telemetry_schema_version) {
+        throw std::invalid_argument{"unsupported telemetry schema version"};
+    }
+}
+
 std::uint64_t fnv1a64(std::string_view content) noexcept {
     std::uint64_t digest = fnv_offset_basis;
     hash_text(digest, content);

@@ -151,12 +151,21 @@ TEST(TelemetrySerializationTest, EscapesTextAndSerializesEveryObservationKind) {
 TEST(TelemetrySerializationTest, RequiresFinalizationAndEnforcesSerializedByteLimit) {
     TelemetrySnapshot snapshot = populated_snapshot();
     snapshot.finalized = false;
-    EXPECT_THROW(serialize_summary_json(snapshot, metadata()), std::logic_error);
+    EXPECT_THROW(static_cast<void>(serialize_summary_json(snapshot, metadata())), std::logic_error);
 
     snapshot.finalized = true;
     snapshot.configuration.limits.serialized_bytes = 10;
-    EXPECT_THROW(serialize_summary_json(snapshot, metadata()), std::length_error);
-    EXPECT_THROW(serialize_records_jsonl(snapshot, metadata()), std::length_error);
+    EXPECT_THROW(static_cast<void>(serialize_summary_json(snapshot, metadata())),
+                 std::length_error);
+    EXPECT_THROW(static_cast<void>(serialize_records_jsonl(snapshot, metadata())),
+                 std::length_error);
+}
+
+TEST(TelemetrySerializationTest, AcceptsOnlyTheSupportedMajorSchemaVersion) {
+    EXPECT_NO_THROW(require_supported_schema_version(telemetry_schema_version));
+    EXPECT_THROW(require_supported_schema_version(0), std::invalid_argument);
+    EXPECT_THROW(require_supported_schema_version(telemetry_schema_version + 1),
+                 std::invalid_argument);
 }
 
 } // namespace

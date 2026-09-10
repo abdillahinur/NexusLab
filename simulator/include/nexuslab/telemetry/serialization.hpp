@@ -15,6 +15,8 @@ namespace nexuslab::telemetry {
 inline constexpr std::uint32_t telemetry_schema_version = 1;
 inline constexpr std::uint32_t telemetry_catalog_version = 1;
 
+void require_supported_schema_version(std::uint32_t version);
+
 enum class TelemetryRunOutcome : std::uint8_t {
     Completed = 1,
     Stopped = 2,
