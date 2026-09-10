@@ -59,8 +59,10 @@ std::uint64_t JobAttributionSnapshot::accounted_ns() const {
     return checked_add(result, terminal_other_ns);
 }
 
-SummaryBuilder::SummaryBuilder(std::size_t maximum_metric_series)
-    : metrics_{maximum_metric_series}, maximum_metric_series_{maximum_metric_series} {}
+SummaryBuilder::SummaryBuilder(std::size_t maximum_metric_series,
+                               std::size_t maximum_histogram_boundaries)
+    : metrics_{maximum_metric_series, maximum_histogram_boundaries},
+      maximum_metric_series_{maximum_metric_series} {}
 
 void SummaryBuilder::validate(sim::SimTimeNs timestamp, const Correlation& correlation,
                               const TelemetryObservation& observation) const {

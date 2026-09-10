@@ -25,7 +25,8 @@ struct TelemetrySession::Impl final {
         : configuration{value}, next_sample_timestamp{sim::SimTimeNs{value.sample_interval_ns}} {
         validate_configuration(configuration);
         if (configuration.mode != TelemetryMode::Off) {
-            summary = std::make_unique<SummaryBuilder>(configuration.limits.metric_series);
+            summary = std::make_unique<SummaryBuilder>(configuration.limits.metric_series,
+                                                       configuration.limits.histogram_boundaries);
         }
     }
 
@@ -210,6 +211,10 @@ TelemetryMode TelemetrySession::mode() const noexcept {
     return implementation_->configuration.mode;
 }
 
+const TelemetryConfiguration& TelemetrySession::configuration() const noexcept {
+    return implementation_->configuration;
+}
+
 bool TelemetrySession::enabled() const noexcept { return mode() != TelemetryMode::Off; }
 
 TelemetrySink TelemetrySession::sink() noexcept { return TelemetrySink{*this}; }
@@ -256,5 +261,15 @@ std::size_t TelemetrySession::retained_correlation_edges() const noexcept {
 }
 
 bool TelemetrySession::finalized() const noexcept { return implementation_->is_finalized; }
+
+TelemetrySnapshot TelemetrySession::snapshot() const {
+    return TelemetrySnapshot{configuration(),
+                             metric_snapshots(),
+                             job_attributions(),
+                             {records().begin(), records().end()},
+                             {samples().begin(), samples().end()},
+                             retained_correlation_edges(),
+                             finalized()};
+}
 
 } // namespace nexuslab::telemetry

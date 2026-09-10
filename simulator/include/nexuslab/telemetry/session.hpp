@@ -15,6 +15,18 @@ namespace nexuslab::telemetry {
 
 class TelemetrySession;
 
+struct TelemetrySnapshot final {
+    TelemetryConfiguration configuration;
+    std::vector<MetricSeriesSnapshot> metrics;
+    std::vector<JobAttributionSnapshot> job_attributions;
+    std::vector<TelemetryRecord> records;
+    std::vector<MetricSample> samples;
+    std::size_t retained_correlation_edges{0};
+    bool finalized{false};
+
+    bool operator==(const TelemetrySnapshot&) const = default;
+};
+
 class TelemetrySink final {
   public:
     TelemetrySink() = default;
@@ -40,6 +52,7 @@ class TelemetrySession final {
     TelemetrySession& operator=(TelemetrySession&&) = delete;
 
     [[nodiscard]] TelemetryMode mode() const noexcept;
+    [[nodiscard]] const TelemetryConfiguration& configuration() const noexcept;
     [[nodiscard]] bool enabled() const noexcept;
     [[nodiscard]] TelemetrySink sink() noexcept;
 
@@ -55,6 +68,7 @@ class TelemetrySession final {
     [[nodiscard]] std::span<const MetricSample> samples() const noexcept;
     [[nodiscard]] std::size_t retained_correlation_edges() const noexcept;
     [[nodiscard]] bool finalized() const noexcept;
+    [[nodiscard]] TelemetrySnapshot snapshot() const;
 
   private:
     struct Impl;

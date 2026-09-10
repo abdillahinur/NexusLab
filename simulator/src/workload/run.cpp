@@ -27,6 +27,8 @@ TrainingReport run_training(const TrainingScenario& scenario) {
     if (scenario.controls.size() > 10000 || scenario.gpu_controls.size() > 10000) {
         throw std::length_error{"scenario control limit exceeded"};
     }
+    telemetry::TelemetrySession telemetry_session{scenario.telemetry};
+    const telemetry::TelemetrySink telemetry_sink = telemetry_session.sink();
     auto graph = topology::generate_clos({scenario.gpus, 8, 8, 8});
     std::vector<transport::DirectedLinkConfiguration> links;
     for (const auto& link : graph->links()) {
@@ -37,13 +39,19 @@ TrainingReport run_training(const TrainingScenario& scenario) {
             }
         }
     }
-    transport::TransportRuntime transport{*graph, links};
-    routing::Router router{
-        *graph, transport, routing::PolicyRegistry{}, {scenario.routing_policy, scenario.seed}};
-    collective::RingExecutor collectives{*graph, router, scenario.local};
-    WorkloadEngine jobs{*graph, collectives, {}, scenario.scheduling};
+    transport::TransportRuntime transport{*graph, links, {}, telemetry_sink};
+    routing::Router router{*graph,
+                           transport,
+                           routing::PolicyRegistry{},
+                           {scenario.routing_policy, scenario.seed},
+                           telemetry_sink};
+    collective::RingExecutor collectives{*graph, router, scenario.local, telemetry_sink};
+    WorkloadEngine jobs{*graph, collectives, {}, scenario.scheduling, nullptr, telemetry_sink};
     TrainingDispatcher dispatcher{jobs, collectives, transport};
-    sim::Simulation simulation{scenario.seed, sim::TraceMode::Disabled};
+    const sim::TraceMode trace_mode = scenario.telemetry.mode == telemetry::TelemetryMode::Full
+                                          ? sim::TraceMode::Enabled
+                                          : sim::TraceMode::Disabled;
+    sim::Simulation simulation{scenario.seed, trace_mode, telemetry_sink};
     for (const auto& spec : scenario.jobs) {
         static_cast<void>(jobs.schedule(spec, simulation));
     }
@@ -55,14 +63,17 @@ TrainingReport run_training(const TrainingScenario& scenario) {
         static_cast<void>(
             jobs.schedule_gpu_state(control.gpu, control.healthy, control.timestamp, simulation));
     }
-    TrainingReport report{simulation.run(dispatcher),
+    const sim::SimulationResult simulation_result = simulation.run(dispatcher);
+    telemetry_session.finalize(simulation_result.final_time);
+    TrainingReport report{simulation_result,
                           jobs.take_completed(),
                           {},
                           {},
                           {},
                           router.take_decisions(),
                           0,
-                          {}};
+                          {},
+                          telemetry_session.snapshot()};
     if (report.simulation.status != sim::SimulationStatus::Completed) {
         throw std::runtime_error{
             report.simulation.error.value_or("training run did not finish all jobs")};

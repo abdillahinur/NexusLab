@@ -30,6 +30,8 @@ TEST(TelemetryConfigurationTest, UsesSummaryDefaultsAndRejectsInvalidLimits) {
 
     EXPECT_EQ(defaults.mode, TelemetryMode::Summary);
     EXPECT_EQ(mode_name(defaults.mode), std::string_view{"summary"});
+    EXPECT_EQ(parse_mode("full"), TelemetryMode::Full);
+    EXPECT_THROW(static_cast<void>(parse_mode("verbose")), std::invalid_argument);
     EXPECT_NO_THROW(validate_configuration(defaults));
 
     auto invalid = defaults;

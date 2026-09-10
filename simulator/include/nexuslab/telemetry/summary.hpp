@@ -29,7 +29,9 @@ struct JobAttributionSnapshot final {
 
 class SummaryBuilder final {
   public:
-    explicit SummaryBuilder(std::size_t maximum_metric_series = TelemetryLimits{}.metric_series);
+    explicit SummaryBuilder(
+        std::size_t maximum_metric_series = TelemetryLimits{}.metric_series,
+        std::size_t maximum_histogram_boundaries = TelemetryLimits{}.histogram_boundaries);
 
     void validate(sim::SimTimeNs timestamp, const Correlation& correlation,
                   const TelemetryObservation& observation) const;

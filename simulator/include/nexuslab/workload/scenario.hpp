@@ -3,6 +3,7 @@
 #pragma once
 #include "nexuslab/collective/runtime.hpp"
 #include "nexuslab/scheduling/policy.hpp"
+#include "nexuslab/telemetry/metrics.hpp"
 #include "nexuslab/workload/model.hpp"
 #include <string_view>
 namespace nexuslab::workload {
@@ -37,6 +38,7 @@ struct TrainingScenario final {
     std::vector<JobControl> controls;
     std::optional<scheduling::Configuration> scheduling;
     std::vector<GpuControl> gpu_controls;
+    telemetry::TelemetryConfiguration telemetry{};
 };
 [[nodiscard]] std::vector<Profile> profiles();
 [[nodiscard]] TrainingScenario parse_scenario(std::string_view yaml);

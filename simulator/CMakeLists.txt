@@ -11,6 +11,7 @@ add_library(
     src/telemetry/metrics.cpp
     src/telemetry/records.cpp
     src/telemetry/samples.cpp
+    src/telemetry/serialization.cpp
     src/telemetry/summary.cpp
     src/telemetry/session.cpp
     src/transport/link_queue.cpp
@@ -74,6 +75,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/telemetry_metrics_test.cpp
         tests/telemetry_records_test.cpp
         tests/telemetry_sampling_test.cpp
+        tests/telemetry_serialization_test.cpp
         tests/telemetry_summary_test.cpp
         tests/telemetry_session_test.cpp
         tests/telemetry_integration_test.cpp
@@ -114,6 +116,10 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     set_tests_properties(nexuslab_cli_scheduled_training PROPERTIES PASS_REGULAR_EXPRESSION "placement job=")
     add_test(NAME nexuslab_cli_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --timeline)
     set_tests_properties(nexuslab_cli_training PROPERTIES PASS_REGULAR_EXPRESSION "state=succeeded")
+    add_test(NAME nexuslab_cli_telemetry_summary COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --telemetry-summary-json)
+    set_tests_properties(nexuslab_cli_telemetry_summary PROPERTIES PASS_REGULAR_EXPRESSION "\"schema\":\"nexuslab.telemetry.summary\"")
+    add_test(NAME nexuslab_cli_telemetry_records COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --telemetry-records-jsonl)
+    set_tests_properties(nexuslab_cli_telemetry_records PROPERTIES PASS_REGULAR_EXPRESSION "\"type\":\"footer\"")
     add_test(NAME nexuslab_cli_version COMMAND nexuslab --version)
     set_tests_properties(nexuslab_cli_version PROPERTIES PASS_REGULAR_EXPRESSION "NexusLab 0.1.0")
     add_test(NAME nexuslab_cli_initial_topology COMMAND nexuslab topology summary --clos initial)

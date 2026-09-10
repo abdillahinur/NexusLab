@@ -376,6 +376,45 @@ TEST(TrainingScenarioTest, RejectsUnknownDuplicateUnsupportedAndOversizedInputs)
               [] { static_cast<void>(parse_scenario(std::string(1'048'577, ' '))); }),
           true);
 }
+TEST(TrainingScenarioTest, ParsesModeSpecificTelemetryConfigurationStrictly) {
+    const auto defaults = parse_scenario("version: 1\njobs: [{workers: [0]}]\n");
+    equal(defaults.telemetry.mode, telemetry::TelemetryMode::Summary);
+
+    const auto full = parse_scenario(
+        "version: 1\ntelemetry: {mode: full, sample_interval_ns: 25, limits: "
+        "{metric_series: 50, decision_records: 60, domain_records: 70, samples: 80, "
+        "histogram_boundaries: 20, correlation_edges: 90, serialized_bytes: 10000}}\n"
+        "jobs: [{workers: [0]}]\n");
+    equal(full.telemetry.mode, telemetry::TelemetryMode::Full);
+    equal(full.telemetry.sample_interval_ns, 25U);
+    equal(full.telemetry.limits.metric_series, 50U);
+    equal(full.telemetry.limits.domain_records, 70U);
+    equal(full.telemetry.limits.serialized_bytes, 10'000U);
+
+    const auto full_run = run_training(
+        parse_scenario("version: 1\ntelemetry: {mode: full}\njobs: [{workers: [0], steps: 1}]\n"));
+    equal(full_run.telemetry.finalized, true);
+    equal(full_run.telemetry.records.empty(), false);
+    const auto off_run = run_training(
+        parse_scenario("version: 1\ntelemetry: {mode: off}\njobs: [{workers: [0], steps: 1}]\n"));
+    equal(off_run.telemetry.finalized, true);
+    equal(off_run.telemetry.metrics.empty(), true);
+    equal(off_run.telemetry.records.empty(), true);
+
+    for (const auto* yaml :
+         {"version: 1\ntelemetry: {mode: off, limits: {metric_series: 1}}\njobs: "
+          "[{workers: [0]}]\n",
+          "version: 1\ntelemetry: {mode: summary, sample_interval_ns: 1}\njobs: "
+          "[{workers: [0]}]\n",
+          "version: 1\ntelemetry: {mode: sampled, limits: {domain_records: 1}}\njobs: "
+          "[{workers: [0]}]\n",
+          "version: 1\ntelemetry: {mode: unknown}\njobs: [{workers: [0]}]\n",
+          "version: 1\ntelemetry: {mode: full, extra: 1}\njobs: [{workers: [0]}]\n"}) {
+        equal(throws<std::invalid_argument>(
+                  [&] { static_cast<void>(parse_scenario(std::string_view{yaml})); }),
+              true);
+    }
+}
 TEST(TrainingTest, NewTypedEventsKeepEnvelopeBoundedAndStableTraceKinds) {
     equal(sizeof(sim::Event) <= 80, true);
     equal(sim::payload_kind(WorkloadEvent{JobId{0}, WorkloadEventKind::Arrival}),

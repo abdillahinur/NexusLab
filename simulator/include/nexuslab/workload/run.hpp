@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/sim/simulation.hpp"
+#include "nexuslab/telemetry/session.hpp"
 #include "nexuslab/workload/scenario.hpp"
 #include <iosfwd>
 namespace nexuslab::workload {
@@ -14,6 +15,7 @@ struct TrainingReport final {
     std::vector<routing::RouteDecision> decisions;
     std::uint64_t maximum_waiting_bytes{0};
     std::vector<scheduling::PlacementDecision> placements;
+    telemetry::TelemetrySnapshot telemetry;
 };
 [[nodiscard]] TrainingReport run_training(const TrainingScenario& scenario);
 void write_report(const TrainingReport& report, std::ostream& output, bool include_timeline);

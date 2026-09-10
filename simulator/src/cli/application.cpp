@@ -3,6 +3,7 @@
 
 #include "nexuslab/cli/application.hpp"
 
+#include "nexuslab/telemetry/serialization.hpp"
 #include "nexuslab/topology/clos.hpp"
 #include "nexuslab/topology/export.hpp"
 #include "nexuslab/topology/graph.hpp"
@@ -26,7 +27,8 @@ void print_usage(std::ostream& output) {
               "  nexuslab --help\n"
               "  nexuslab --version\n"
               "  nexuslab train --profiles\n"
-              "  nexuslab train --file <scenario.yaml> [--timeline]\n"
+              "  nexuslab train --file <scenario.yaml> "
+              "[--timeline|--telemetry-summary-json|--telemetry-records-jsonl]\n"
               "  nexuslab topology summary --clos <initial|stretch>\n"
               "  nexuslab topology summary --file <topology.yaml>\n";
 }
@@ -91,6 +93,68 @@ void print_usage(std::ostream& output) {
     return 0;
 }
 
+[[nodiscard]] telemetry::TelemetryRunOutcome telemetry_outcome(sim::SimulationStatus status) {
+    switch (status) {
+    case sim::SimulationStatus::Completed:
+        return telemetry::TelemetryRunOutcome::Completed;
+    case sim::SimulationStatus::Stopped:
+        return telemetry::TelemetryRunOutcome::Stopped;
+    case sim::SimulationStatus::Failed:
+        return telemetry::TelemetryRunOutcome::Failed;
+    }
+    throw std::invalid_argument{"unknown simulation status"};
+}
+
+[[nodiscard]] telemetry::TelemetryRunMetadata
+telemetry_metadata(const workload::TrainingScenario& scenario,
+                   const workload::TrainingReport& report, std::string_view source) {
+    telemetry::TelemetryRunMetadata metadata;
+    metadata.seed = scenario.seed;
+    metadata.scenario_digest = telemetry::fnv1a64(source);
+    metadata.routing_policy = scenario.routing_policy;
+    if (scenario.scheduling.has_value()) {
+        metadata.scheduling_policy = scenario.scheduling->policy;
+    }
+    metadata.outcome = telemetry_outcome(report.simulation.status);
+    metadata.final_time = report.simulation.final_time;
+    metadata.complete = report.simulation.status == sim::SimulationStatus::Completed;
+    return metadata;
+}
+
+struct CommandStreams final {
+    std::ostream& output;
+    std::ostream& error;
+};
+
+[[nodiscard]] int run_training_file(std::span<const std::string_view> arguments,
+                                    CommandStreams streams) {
+    if ((arguments.size() != 3U && arguments.size() != 4U) ||
+        (arguments.size() == 4U && arguments[3] != "--timeline" &&
+         arguments[3] != "--telemetry-summary-json" &&
+         arguments[3] != "--telemetry-records-jsonl")) {
+        print_usage(streams.error);
+        return 2;
+    }
+
+    const auto yaml = read_training_file(arguments[2]);
+    const auto scenario = workload::parse_scenario(yaml);
+    const auto report = workload::run_training(scenario);
+    if (arguments.size() == 4U && arguments[3] == "--telemetry-summary-json") {
+        streams.output << telemetry::serialize_summary_json(
+            report.telemetry, telemetry_metadata(scenario, report, yaml));
+    } else if (arguments.size() == 4U && arguments[3] == "--telemetry-records-jsonl") {
+        streams.output << telemetry::serialize_records_jsonl(
+            report.telemetry, telemetry_metadata(scenario, report, yaml));
+    } else {
+        workload::write_report(report, streams.output,
+                               arguments.size() == 4U && arguments[3] == "--timeline");
+    }
+    return std::any_of(report.jobs.begin(), report.jobs.end(),
+                       [](const auto& job) { return job.state != workload::JobState::Succeeded; })
+               ? 1
+               : 0;
+}
+
 } // namespace
 
 int run(std::span<const std::string_view> arguments, std::ostream& output, std::ostream& error) {
@@ -111,20 +175,8 @@ int run(std::span<const std::string_view> arguments, std::ostream& output, std::
         }
         return 0;
     }
-    if ((arguments.size() == 3U || arguments.size() == 4U) && arguments[0] == "train" &&
-        arguments[1] == "--file") {
-        if (arguments.size() == 4U && arguments[3] != "--timeline") {
-            print_usage(error);
-            return 2;
-        }
-        const auto yaml = read_training_file(arguments[2]);
-        const auto report = workload::run_training(workload::parse_scenario(yaml));
-        workload::write_report(report, output, arguments.size() == 4U);
-        return std::any_of(
-                   report.jobs.begin(), report.jobs.end(),
-                   [](const auto& job) { return job.state != workload::JobState::Succeeded; })
-                   ? 1
-                   : 0;
+    if (arguments.size() >= 2U && arguments[0] == "train" && arguments[1] == "--file") {
+        return run_training_file(arguments, CommandStreams{output, error});
     }
 
     if (arguments.size() >= 2U && arguments[0] == "topology" && arguments[1] == "summary") {

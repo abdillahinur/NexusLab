@@ -24,6 +24,7 @@ enum class TelemetryMode : std::uint8_t {
 };
 
 [[nodiscard]] std::string_view mode_name(TelemetryMode mode);
+[[nodiscard]] TelemetryMode parse_mode(std::string_view mode);
 
 struct TelemetryLimits final {
     std::size_t metric_series{100'000};
@@ -219,7 +220,9 @@ struct MetricSeriesSnapshot final {
 
 class MetricRegistry final {
   public:
-    explicit MetricRegistry(std::size_t maximum_series = TelemetryLimits{}.metric_series);
+    explicit MetricRegistry(
+        std::size_t maximum_series = TelemetryLimits{}.metric_series,
+        std::size_t maximum_histogram_boundaries = TelemetryLimits{}.histogram_boundaries);
     ~MetricRegistry();
     MetricRegistry(const MetricRegistry&) = delete;
     MetricRegistry& operator=(const MetricRegistry&) = delete;

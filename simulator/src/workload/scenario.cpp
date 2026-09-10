@@ -65,6 +65,61 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     }
     return static_cast<std::uint32_t>(number_value);
 }
+[[nodiscard]] std::size_t narrow_size(std::uint64_t number_value) {
+    if (number_value > std::numeric_limits<std::size_t>::max()) {
+        throw std::invalid_argument{"scenario integer exceeds size range"};
+    }
+    return static_cast<std::size_t>(number_value);
+}
+
+[[nodiscard]] telemetry::TelemetryConfiguration read_telemetry(const YAML::Node& node) {
+    telemetry::TelemetryConfiguration result;
+    if (!node) {
+        return result;
+    }
+    keys(node, {"mode", "sample_interval_ns", "limits"});
+    if (!node["mode"] || !node["mode"].IsScalar()) {
+        throw std::invalid_argument{"telemetry mode must be a scalar"};
+    }
+    result.mode = telemetry::parse_mode(node["mode"].Scalar());
+    const YAML::Node limits = node["limits"];
+    if (result.mode == telemetry::TelemetryMode::Off && (node["sample_interval_ns"] || limits)) {
+        throw std::invalid_argument{"off telemetry accepts only its mode"};
+    }
+    if ((result.mode == telemetry::TelemetryMode::Summary) && node["sample_interval_ns"]) {
+        throw std::invalid_argument{"summary telemetry does not sample"};
+    }
+    if (node["sample_interval_ns"]) {
+        result.sample_interval_ns = number(node["sample_interval_ns"]);
+    }
+    if (limits) {
+        keys(limits, {"metric_series", "decision_records", "domain_records", "samples",
+                      "histogram_boundaries", "correlation_edges", "serialized_bytes"});
+        if (result.mode == telemetry::TelemetryMode::Summary &&
+            (limits["decision_records"] || limits["domain_records"] || limits["samples"] ||
+             limits["correlation_edges"])) {
+            throw std::invalid_argument{"summary telemetry accepts only summary limits"};
+        }
+        if (result.mode == telemetry::TelemetryMode::Sampled && limits["domain_records"]) {
+            throw std::invalid_argument{"sampled telemetry does not retain domain records"};
+        }
+        result.limits.metric_series =
+            narrow_size(value(limits, "metric_series", result.limits.metric_series));
+        result.limits.decision_records =
+            narrow_size(value(limits, "decision_records", result.limits.decision_records));
+        result.limits.domain_records =
+            narrow_size(value(limits, "domain_records", result.limits.domain_records));
+        result.limits.samples = narrow_size(value(limits, "samples", result.limits.samples));
+        result.limits.histogram_boundaries =
+            narrow_size(value(limits, "histogram_boundaries", result.limits.histogram_boundaries));
+        result.limits.correlation_edges =
+            narrow_size(value(limits, "correlation_edges", result.limits.correlation_edges));
+        result.limits.serialized_bytes =
+            value(limits, "serialized_bytes", result.limits.serialized_bytes);
+    }
+    telemetry::validate_configuration(result);
+    return result;
+}
 void read_compute(const YAML::Node& node, sim::SimDurationNs default_compute, JobSpec& result) {
     const auto workers = node["workers"];
     const auto requested = result.requested_workers;
@@ -181,7 +236,7 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     const auto root = YAML::Load(std::string{yaml});
     keys(root, {"version", "gpus", "seed", "routing_policy", "bandwidth_bps", "propagation_ns",
                 "buffer_bytes", "scheduling_policy", "gpu_controls", "local_bandwidth_bps",
-                "local_latency_ns", "jobs", "controls"});
+                "local_latency_ns", "telemetry", "jobs", "controls"});
     if (number(root["version"]) != 1) {
         throw std::invalid_argument{"unsupported training scenario version"};
     }
@@ -225,6 +280,7 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     result.controls = read_controls(root["controls"], result.jobs.size());
     result.gpu_controls =
         read_gpu_controls(root["gpu_controls"], result.gpus, result.scheduling.has_value());
+    result.telemetry = read_telemetry(root["telemetry"]);
     return result;
 }
 } // namespace nexuslab::workload

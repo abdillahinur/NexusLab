@@ -205,6 +205,22 @@ std::string_view mode_name(TelemetryMode mode) {
     throw std::invalid_argument{"unknown telemetry mode"};
 }
 
+TelemetryMode parse_mode(std::string_view mode) {
+    if (mode == "off") {
+        return TelemetryMode::Off;
+    }
+    if (mode == "summary") {
+        return TelemetryMode::Summary;
+    }
+    if (mode == "sampled") {
+        return TelemetryMode::Sampled;
+    }
+    if (mode == "full") {
+        return TelemetryMode::Full;
+    }
+    throw std::invalid_argument{"unknown telemetry mode"};
+}
+
 void validate_configuration(const TelemetryConfiguration& configuration) {
     static_cast<void>(mode_name(configuration.mode));
     if (configuration.sample_interval_ns == 0 || configuration.limits.metric_series == 0 ||
@@ -368,11 +384,16 @@ void validate_metric_catalog(std::span<const MetricDefinition> catalog,
 }
 
 struct MetricRegistry::Impl final {
-    explicit Impl(std::size_t maximum) : maximum_series{maximum} {
-        if (maximum_series == 0) {
-            throw std::invalid_argument{"telemetry metric series limit must be positive"};
+    struct Limits final {
+        std::size_t series;
+        std::size_t histogram_boundaries;
+    };
+
+    explicit Impl(Limits limits) : maximum_series{limits.series} {
+        if (maximum_series == 0 || limits.histogram_boundaries == 0) {
+            throw std::invalid_argument{"telemetry metric catalog limits must be positive"};
         }
-        validate_metric_catalog(metric_catalog(), TelemetryLimits{}.histogram_boundaries);
+        validate_metric_catalog(metric_catalog(), limits.histogram_boundaries);
     }
 
     [[nodiscard]] MetricSeriesState& require_series(MetricId metric, const MetricLabels& labels,
@@ -431,8 +452,9 @@ struct MetricRegistry::Impl final {
     std::map<MetricSeriesKey, MetricSeriesState> series;
 };
 
-MetricRegistry::MetricRegistry(std::size_t maximum_series)
-    : implementation_{std::make_unique<Impl>(maximum_series)} {}
+MetricRegistry::MetricRegistry(std::size_t maximum_series, std::size_t maximum_histogram_boundaries)
+    : implementation_{
+          std::make_unique<Impl>(Impl::Limits{maximum_series, maximum_histogram_boundaries})} {}
 
 MetricRegistry::~MetricRegistry() = default;
 
