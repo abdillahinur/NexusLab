@@ -7,7 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Accepted — 2026-09-09. Implementation and validation remain part of Cluster 8.
+Accepted — 2026-09-09. Implemented and validated by Architecture Gate 8 on 2026-09-10.
 
 ## Context
 

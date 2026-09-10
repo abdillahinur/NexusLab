@@ -11,6 +11,7 @@ Build with `bash scripts/build.sh release`, then run:
 build/release/simulator/nexuslab train --file examples/training/two-worker.yaml --timeline
 build/release/simulator/nexuslab train --file examples/training/overlap-straggler.yaml --timeline
 build/release/simulator/nexuslab train --file examples/training/scheduled.yaml --timeline
+build/release/simulator/nexuslab train --file examples/training/two-worker.yaml --telemetry-summary-json
 build/release/simulator/nexuslab train --profiles
 ```
 
@@ -38,6 +39,7 @@ scalars are unsigned and at most 20 characters. There are at most 10,000 jobs an
 | `buffer_bytes` | Waiting buffer per directed fabric arc, default 262,144; zero exercises loss |
 | `local_bandwidth_bps` | Independent local transfer bandwidth, default 800,000,000,000 |
 | `local_latency_ns` | Local transfer latency, default 0 |
+| `telemetry` | Optional strict telemetry mapping; absence defaults to summary mode |
 | `jobs` | Required nonempty sequence of job mappings |
 | `controls` | Optional job cancellation/worker-failure event sequence |
 
@@ -91,10 +93,75 @@ Cancellation/failure cancels pending compute and prevents new collective rounds.
 network/local transfers drain. Therefore the simulator's final timestamp can exceed the cancelled
 job's completion timestamp. No retries or reliable recovery are implied.
 
+## Telemetry configuration and replay streams
+
+Telemetry is per run and observational. It never changes simulation event ordering, randomness,
+policy decisions, or domain outcomes. Four modes trade retained detail for cost:
+
+| Mode | Retained output |
+|---|---|
+| `off` | No metrics, records, or samples; canonical output still carries provenance and catalog definitions |
+| `summary` | Incremental metrics and job attribution; no retained records or samples; default |
+| `sampled` | Summary, deterministic counter/gauge samples, and routing/placement decision records |
+| `full` | Summary, samples, decision records, and all typed domain/kernel records |
+
+```yaml
+telemetry:
+  mode: sampled
+  sample_interval_ns: 100000
+  limits:
+    metric_series: 100000
+    decision_records: 100000
+    samples: 1000000
+    histogram_boundaries: 64
+    correlation_edges: 4000000
+    serialized_bytes: 1073741824
+```
+
+`off` accepts only `mode`. `summary` may override only `metric_series`,
+`histogram_boundaries`, and `serialized_bytes`; it does not accept `sample_interval_ns`.
+`sampled` accepts the sample interval and every limit except `domain_records`. `full` accepts all
+fields, including `domain_records`. Defaults are 1,000,000 ns per sample, 100,000 metric series,
+100,000 decision records, 1,000,000 domain records, 1,000,000 samples, 64 histogram boundaries,
+4,000,000 correlation edges, and 1 GiB per serialized document. Every configured quantity must be
+positive. Unknown, duplicate, or mode-inapplicable fields are rejected.
+
+Enabled modes never silently discard required observations. A timestamp regression, invalid
+metric/label, numeric or ID overflow, or retention/serialization limit failure makes the run fail
+explicitly while preserving the valid in-memory prefix for diagnosis.
+
+Choose exactly one human or canonical stream:
+
+```bash
+nexuslab train --file scenario.yaml --timeline
+nexuslab train --file scenario.yaml --telemetry-summary-json
+nexuslab train --file scenario.yaml --telemetry-records-jsonl
+```
+
+Summary JSON embeds run provenance, terminal completeness, the versioned metric catalog, canonical
+metric series, and job attribution. Records JSONL contains a provenance/catalog header, ordered
+typed records, ordered samples, and a footer with counts, completeness, and content digest. These
+streams are never mixed with the human timeline on standard output. See the complete
+[metric dictionary](design/telemetry.md) for units, aggregation, missing-data, sampling, correlation,
+and compatibility rules.
+
+The Cluster 8 demo provides matching summary/full rack-incast scenarios:
+
+```bash
+nexuslab train --file examples/training/telemetry-incast-summary.yaml --telemetry-summary-json
+nexuslab train --file examples/training/telemetry-incast-full.yaml --telemetry-records-jsonl
+```
+
+The full stream contains enough logical data for a replay consumer, but is not yet a durable result
+package. Cluster 12 owns repository layout, persistence, compression, indexing, and replay-container
+compatibility. The first release remains replay-only: no live streaming, production ingestion, or
+cluster control is provided.
+
 ## Metrics and timelines
 
-The CLI exits 0 when every job succeeds, 1 when any job fails, cancels, remains waiting, or a run error occurs, and 2 for
-invalid command syntax. A drained event queue alone is not a successful workload outcome.
+The CLI exits 0 when every job succeeds, 1 when any job fails, cancels, remains waiting, or a run
+error occurs, and 2 for invalid command syntax. A drained event queue alone is not a successful
+workload outcome.
 
 - `elapsed_ns`: arrival-to-terminal duration, or arrival-to-final-observation for a waiting job;
   pre-arrival cancellation has zero elapsed work.
@@ -128,7 +195,8 @@ Transport and routing retain their existing chunk/route/decision limits. Large c
 profile, workers, steps and chunk size may exceed those limits; reduce the scenario or explicitly
 configure API budgets. Input validation rejects ordinary invalid dimensions; resource exhaustion
 while running is fatal and does not support rollback/resumption. Completed state remains inspectable
-until the run is destroyed. Durable replay and telemetry storage are later milestones.
+until the run is destroyed. Canonical telemetry streams exist; durable replay packaging and storage
+remain Cluster 12 work.
 
 Local transfers share neither a serialized local bus nor a contention model. Each uses its configured
 bandwidth/latency independently. Ring rounds use global barriers; pipelined channels, reduction

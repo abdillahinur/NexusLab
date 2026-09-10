@@ -20,6 +20,18 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   correlations, mode-dependent retention, timestamp validation, and explicit record/edge limits.
 - Deterministic counter and gauge time-series sampling with equal-time boundary deferral, canonical
   series order, final-boundary flushing, overflow-safe intervals, and bounded sample retention.
+- Typed simulation, job, collective, transfer, queue, routing, placement, failure, and metric records
+  with monotonic record IDs and bounded cross-domain correlation.
+- Incremental slowdown attribution and aggregate metrics instrumented across the simulation,
+  workload, collective, transport, routing, and scheduling boundaries.
+- Version-1 canonical telemetry summary JSON and records JSONL with provenance, terminal
+  completeness, catalog definitions, ordered records/samples, content digests, and strict limits.
+- Strict training-scenario telemetry configuration, explicit CLI summary/records streams, and
+  checked-in summary/full rack-incast examples.
+- Mode-invariant domain outcome digests, byte-identical full-trace summary reconstruction, terminal
+  and missing-result coverage, independent session tests, and a four-mode Release overhead baseline.
+- Cluster 8 metric dictionary, benchmark record, and Architecture Gate 8 approval; Milestone 6
+  remains open for Cluster 9 failure injection and recovery.
 
 - Milestone 5 / Cluster 7: optional non-preemptive scheduling and GPU placement.
 - Bounded resource inventory, validated atomic allocations, priority/arrival/ID waiting order,

@@ -7,9 +7,9 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-This document describes the gate-approved implementation through Cluster 7, the accepted Cluster 8
-telemetry architecture, and the explicitly pending NexusBench/research/adoption boundaries. Pending
-Cluster 24, Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-approved;
+This document describes the gate-approved implementation through Cluster 8 and the explicitly
+pending failure, NexusBench, research, and adoption boundaries. Pending Cluster 9, Cluster 24,
+Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-approved;
 subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
@@ -165,7 +165,8 @@ Each admitted transfer has a pinned route. Failures cancel/drop existing affecte
 Cluster 3 rules; subsequent admissions select surviving paths. A disconnected request records a
 no-route decision and creates no transfer. Decision records include request, policy/version,
 simulated time, operational revision, candidate count, path, score, reason, and transfer identity.
-The bounded record buffer can be drained; durable telemetry serialization remains later work.
+The bounded routing record buffer can be drained or observed by the Cluster 8 telemetry session.
+Canonical telemetry serialization now exists; durable result packaging remains Cluster 12 work.
 Host policy execution time is measured outside deterministic decision records.
 
 See [ADR-007](docs/adr/ADR-007-routing-policy-boundary.md) for alternatives, exact scoring and
@@ -249,8 +250,9 @@ exhaustion fails explicitly rather than silently truncating required data.
 Cluster 8 uses canonical JSON summaries and JSON Lines telemetry records. Protobuf, compression,
 durable result packaging, databases, and dashboard transport remain deferred to Cluster 12. See
 [ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md) for schema, sampling, attribution,
-retention, compatibility, and validation decisions. Implementation and Architecture Gate 8 are
-still pending.
+retention, compatibility, and validation decisions, the
+[metric catalog](docs/design/telemetry.md) for the public dictionary, and
+[Architecture Gate 8](docs/architecture-gates/cluster-8.md) for completion evidence.
 
 ## Pending NexusBench, research, and adoption architecture
 

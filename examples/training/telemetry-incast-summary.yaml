@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 512
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 100000000000
+propagation_ns: 500
+buffer_bytes: 262144
+telemetry:
+  mode: summary
+jobs:
+  - {name: rack-1-to-0, workers: [64, 0], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-2-to-0, workers: [128, 1], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-3-to-0, workers: [192, 2], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-4-to-0, workers: [256, 3], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-5-to-0, workers: [320, 4], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-6-to-0, workers: [384, 5], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}
+  - {name: rack-7-to-0, workers: [448, 6], steps: 1, compute_ns: 1000, gradient_bytes: 65536, bucket_bytes: 65536, chunk_bytes: 4096}

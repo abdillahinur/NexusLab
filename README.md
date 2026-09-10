@@ -15,9 +15,9 @@ simulator version, and metric definitions are held constant, how does changing o
 policy affect the modeled outcome?
 
 > [!IMPORTANT]
-> Clusters 0–7 are implemented and architecture-gate approved. Cluster 8 telemetry architecture is
-> accepted, but its implementation and gate remain in progress. NexusBench-v0, trace-driven replay,
-> advanced parallelism, multi-rail modeling, the reference study, and shadow/advisory mode are
+> Clusters 0–8 are implemented and architecture-gate approved. Cluster 9 failure injection and
+> recovery is next. NexusBench-v0, durable result packaging/replay, advanced parallelism,
+> multi-rail modeling, trace-driven replay, the reference study, and shadow/advisory mode are
 > planned work—not completed capabilities or published results.
 
 ## Why NexusLab and NexusBench
@@ -52,12 +52,23 @@ The gate-approved foundation currently provides:
 - optional non-preemptive admission and GPU placement;
 - first-fit, seeded-random, rack-local, and compact placement policies;
 - separate scheduling wait, compute, communication, and GPU-idle measurements;
+- per-run `off`, `summary`, `sampled`, and `full` telemetry modes with explicit limits;
+- a versioned 45-metric catalog with integer units, bounded labels, fixed histograms, and defined
+  missing-data behavior;
+- deterministic samples, typed event/decision traces, and correlations across jobs, collectives,
+  transfers, links, routing, and placement;
+- canonical summary JSON and telemetry JSON Lines with provenance, completeness, catalog, and
+  content digests;
+- byte-identical live/full-trace summary reconstruction and telemetry-mode-invariant domain outcome
+  digests;
 - synthetic benchmark harnesses for the simulation core, topology, transport, routing, training,
-  and scheduling.
+  scheduling, and telemetry overhead.
 
-Cluster 8 is adding the versioned telemetry catalog and observation boundary needed by later
-failure, result-store, and NexusBench work. The accepted design is documented in
-[ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md); completion is not claimed yet.
+Cluster 8's design is documented in
+[ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md), its complete public dictionary in
+[the telemetry design](docs/design/telemetry.md), and its evidence in
+[Architecture Gate 8](docs/architecture-gates/cluster-8.md). Failure detection/recovery behavior and
+the observable spine-link failure scenario remain Cluster 9 work.
 
 ## Explicit boundaries
 
@@ -139,6 +150,10 @@ On a WSL-mounted checkout:
   --file examples/training/two-worker.yaml --timeline
 ~/.cache/nexuslab-build/release/simulator/nexuslab train \
   --file examples/training/scheduled.yaml --timeline
+~/.cache/nexuslab-build/release/simulator/nexuslab train \
+  --file examples/training/two-worker.yaml --telemetry-summary-json
+~/.cache/nexuslab-build/release/simulator/nexuslab train \
+  --file examples/training/telemetry-incast-full.yaml --telemetry-records-jsonl
 ```
 
 On native Linux, replace `~/.cache/nexuslab-build/release` with `build/release`.
@@ -172,6 +187,10 @@ bash scripts/benchmark-training-suite.sh
 # Placement under rack pressure and other admission cases
 bash scripts/benchmark-scheduling.sh --policy compact --case rack-pressure
 bash scripts/benchmark-scheduling-suite.sh
+
+# Telemetry cost/detail modes on one frozen 512-GPU scenario
+~/.cache/nexuslab-build/release/simulator/nexuslab_telemetry_benchmarks --mode summary
+~/.cache/nexuslab-build/release/simulator/nexuslab_telemetry_benchmarks --mode full
 ```
 
 Recorded baseline documents preserve commands, environments, limitations, and measured results.
@@ -243,6 +262,7 @@ performance or match NCCL/RDMA behavior.
 - [Study artifact rules](docs/studies/README.md)
 - [Training scenario guide](docs/training-scenarios.md)
 - [Scheduling guide](docs/scheduling.md)
+- [Telemetry design and metric catalog](docs/design/telemetry.md)
 - [Architecture decision records](docs/adr/)
 - [Architecture gates](docs/architecture-gates/)
 - [Recorded benchmarks](docs/benchmarks/)

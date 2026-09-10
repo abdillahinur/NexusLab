@@ -4965,8 +4965,9 @@ A cluster is done only when:
 
 ## Step 1
 
-Finish Cluster 8 telemetry and Cluster 9 failure gates. These are the observability and failure
-foundation for every NexusBench track and scientific-release capability.
+Complete Cluster 9 failure injection and recovery now that the Cluster 8 telemetry gate is approved.
+Together they are the observability and failure foundation for every NexusBench track and
+scientific-release capability.
 
 ## Step 2
 
@@ -5084,7 +5085,7 @@ simulation, networking, distributed systems, observability, benchmarking, and fa
 | 5 | Training Workload Engine | Complete | Yes |
 | 6 | Collective Communication Engine | Complete | Yes |
 | 7 | Scheduler and GPU Placement | Complete | Yes |
-| 8 | Telemetry and Observability | In Progress — architecture accepted | No |
+| 8 | Telemetry and Observability | Complete | Yes |
 | 9 | Failure Injection and Recovery | Not Started | No |
 | 10 | Congestion-Control Framework | Not Started | No |
 | 11 | Experiment Orchestrator | Not Started | No |

@@ -19,7 +19,7 @@ stages they unlock, not as an independent feature checklist.
 | Routing comparison | 4 | ECMP, least-loaded, and queue-aware routing | Complete; Cluster 4 gate approved |
 | Training workload MVP | 5–6 | Synthetic jobs and Ring AllReduce | Complete; Clusters 5 and 6 gates approved |
 | Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Complete; Cluster 7 gate approved |
-| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Cluster 8 in progress; architecture accepted |
+| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Cluster 8 complete/gate approved; Cluster 9 next |
 | Experiment platform | 11–12 | Reproducible matrices, manifests, digests, results, and replay | Not started |
 | NexusBench-v0 specification and harness | 24 + minimum 14–15 | Frozen routing/placement tracks, two baselines each, three-repeat matrices, metrics, policy guide, and digests | Not started; ADR-012 and ADR-013 required |
 | Advanced parallelism | 20 | DP/TP/PP/EP models feeding the planned NB-Collective track | Not started; ADR-014 required |
