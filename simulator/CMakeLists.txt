@@ -24,6 +24,7 @@ add_library(
     src/workload/model.cpp
     src/workload/engine.cpp
     src/workload/metrics.cpp
+    src/workload/telemetry.cpp
     src/collective/planner.cpp
     src/collective/runtime.cpp
     src/routing/paths.cpp

@@ -4,6 +4,7 @@
 #include "nexuslab/collective/model.hpp"
 #include "nexuslab/scheduling/policy.hpp"
 #include "nexuslab/sim/event_id.hpp"
+#include "nexuslab/telemetry/session.hpp"
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/workload/model.hpp"
 #include <map>
@@ -18,7 +19,8 @@ class WorkloadEngine final {
     WorkloadEngine(const topology::TopologyGraph& graph, collective::CollectiveExecutor& executor,
                    WorkloadLimits limits = {},
                    std::optional<scheduling::Configuration> scheduling = std::nullopt,
-                   std::unique_ptr<scheduling::SchedulingPolicy> policy = nullptr);
+                   std::unique_ptr<scheduling::SchedulingPolicy> policy = nullptr,
+                   telemetry::TelemetrySink telemetry = {});
     void dispatch_waiting(sim::SimulationContext& context);
     [[nodiscard]] sim::EventId schedule_gpu_state(topology::GpuId gpu, bool healthy,
                                                   sim::SimTimeNs when,
@@ -65,6 +67,11 @@ class WorkloadEngine final {
     void finish(Record& record, JobState state, std::string reason,
                 sim::SimulationContext& context);
     void trace(const Record& record, sim::SimTimeNs now, std::string action);
+    void emit_job(const Record& record, telemetry::JobTransition transition,
+                  sim::SimulationContext& context, std::uint32_t worker = 0);
+    void emit_terminal_metrics(const JobSnapshot& snapshot, sim::SimulationContext& context);
+    void emit_placement(const scheduling::PlacementDecision& decision,
+                        telemetry::PlacementDecisionId id, sim::SimulationContext& context);
     [[nodiscard]] static JobSnapshot inspect(const Record& record, sim::SimTimeNs now);
     const topology::TopologyGraph* graph_;
     collective::CollectiveExecutor* executor_;
@@ -72,6 +79,7 @@ class WorkloadEngine final {
     std::optional<scheduling::Configuration> scheduling_;
     std::unique_ptr<scheduling::ResourceInventory> inventory_;
     std::unique_ptr<scheduling::SchedulingPolicy> policy_;
+    telemetry::TelemetrySink telemetry_;
     bool admission_pending_{false};
     std::size_t allocation_entries_{0};
     std::vector<scheduling::PlacementDecision> placements_;

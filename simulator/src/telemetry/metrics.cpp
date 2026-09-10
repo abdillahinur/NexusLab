@@ -248,6 +248,34 @@ std::string_view unit_name(MetricUnit unit) {
     throw std::invalid_argument{"unknown telemetry metric unit"};
 }
 
+std::uint64_t policy_label_value(std::string_view policy) {
+    if (policy == "ecmp") {
+        return static_cast<std::uint64_t>(MetricPolicy::Ecmp);
+    }
+    if (policy == "shortest-path") {
+        return static_cast<std::uint64_t>(MetricPolicy::ShortestPath);
+    }
+    if (policy == "least-loaded") {
+        return static_cast<std::uint64_t>(MetricPolicy::LeastLoaded);
+    }
+    if (policy == "queue-aware") {
+        return static_cast<std::uint64_t>(MetricPolicy::QueueAware);
+    }
+    if (policy == "first-fit") {
+        return static_cast<std::uint64_t>(MetricPolicy::FirstFit);
+    }
+    if (policy == "random") {
+        return static_cast<std::uint64_t>(MetricPolicy::Random);
+    }
+    if (policy == "rack-local") {
+        return static_cast<std::uint64_t>(MetricPolicy::RackLocal);
+    }
+    if (policy == "compact") {
+        return static_cast<std::uint64_t>(MetricPolicy::Compact);
+    }
+    return static_cast<std::uint64_t>(MetricPolicy::Extension);
+}
+
 MetricLabels::MetricLabels(std::initializer_list<MetricLabelValue> values) {
     if (values.size() > maximum_size) {
         throw std::length_error{"telemetry metric label limit exceeded"};

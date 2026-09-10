@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/routing/policy.hpp"
+#include "nexuslab/telemetry/session.hpp"
 
 namespace nexuslab::routing {
 struct RoutingConfiguration final {
@@ -26,7 +27,8 @@ struct RouteDecision final {
 class Router final {
   public:
     Router(const topology::TopologyGraph& graph, transport::TransportRuntime& runtime,
-           const PolicyRegistry& registry, RoutingConfiguration configuration = {});
+           const PolicyRegistry& registry, RoutingConfiguration configuration = {},
+           telemetry::TelemetrySink telemetry = {});
     [[nodiscard]] std::optional<transport::SubmittedTransfer>
     submit(const RouteRequest& request, sim::SimulationContext& context);
     [[nodiscard]] std::span<const RouteDecision> decisions() const noexcept;
@@ -34,11 +36,17 @@ class Router final {
     [[nodiscard]] CacheStatistics cache_statistics() const noexcept;
 
   private:
+    [[nodiscard]] telemetry::RoutingDecisionId next_decision_id();
+    void emit_decision(const RouteDecision& decision, telemetry::RoutingDecisionOutcome outcome,
+                       telemetry::RoutingDecisionId id, sim::SimulationContext& context);
     const topology::TopologyGraph* graph_;
     transport::TransportRuntime* runtime_;
     RoutingConfiguration configuration_;
     std::unique_ptr<RoutingPolicy> policy_;
     PathService paths_;
+    telemetry::TelemetrySink telemetry_;
     std::vector<RouteDecision> decisions_;
+    std::uint64_t next_decision_id_{0};
+    bool decision_ids_exhausted_{false};
 };
 } // namespace nexuslab::routing

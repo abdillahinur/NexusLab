@@ -52,6 +52,15 @@ TEST(TelemetryCatalogTest, DefinesStableExplicitKindsUnitsAndBoundaries) {
                             1'000'000'000, 10'000'000'000, 60'000'000'000));
 }
 
+TEST(TelemetryCatalogTest, MapsBuiltInAndExtensionPoliciesToBoundedLabels) {
+    EXPECT_EQ(policy_label_value("ecmp"), static_cast<std::uint64_t>(MetricPolicy::Ecmp));
+    EXPECT_EQ(policy_label_value("queue-aware"),
+              static_cast<std::uint64_t>(MetricPolicy::QueueAware));
+    EXPECT_EQ(policy_label_value("first-fit"), static_cast<std::uint64_t>(MetricPolicy::FirstFit));
+    EXPECT_EQ(policy_label_value("external-policy"),
+              static_cast<std::uint64_t>(MetricPolicy::Extension));
+}
+
 TEST(TelemetryCatalogTest, RejectsDuplicateNamesLabelsAndInvalidHistogramDefinitions) {
     constexpr std::array<std::uint64_t, 2> duplicate_bounds{10, 10};
     const std::array invalid_histogram{

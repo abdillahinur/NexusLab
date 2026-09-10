@@ -79,6 +79,14 @@ void WorkloadEngine::finish(Record& record, JobState state, std::string reason,
     record.finished = context.now();
     trace(record, context.now(), "job_terminal");
     completed_.push_back(inspect(record, context.now()));
+    telemetry::JobTransition transition = telemetry::JobTransition::Failed;
+    if (state == JobState::Succeeded) {
+        transition = telemetry::JobTransition::Succeeded;
+    } else if (state == JobState::Cancelled) {
+        transition = telemetry::JobTransition::Cancelled;
+    }
+    emit_job(record, transition, context);
+    emit_terminal_metrics(completed_.back(), context);
 }
 std::optional<JobSnapshot> WorkloadEngine::snapshot(JobId id, sim::SimTimeNs now) const {
     const auto found = jobs_.find(id);

@@ -133,7 +133,7 @@ enum class CollectiveTransition : std::uint8_t {
 
 struct CollectiveObservation final {
     CollectiveTransition transition;
-    std::uint32_t phase;
+    collective::Phase phase;
     std::uint32_t round;
     std::uint64_t bytes;
 

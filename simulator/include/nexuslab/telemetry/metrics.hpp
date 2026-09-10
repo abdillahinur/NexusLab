@@ -78,6 +78,20 @@ enum class MetricLabel : std::uint8_t {
     Resource = 9,
 };
 
+enum class MetricPolicy : std::uint16_t {
+    Ecmp = 1,
+    ShortestPath = 2,
+    LeastLoaded = 3,
+    QueueAware = 4,
+    FirstFit = 10,
+    Random = 11,
+    RackLocal = 12,
+    Compact = 13,
+    Extension = 1'000,
+};
+
+[[nodiscard]] std::uint64_t policy_label_value(std::string_view policy);
+
 using MetricLabelMask = std::uint32_t;
 
 [[nodiscard]] constexpr MetricLabelMask label_mask(MetricLabel label) noexcept {

@@ -3,6 +3,7 @@
 #pragma once
 #include "nexuslab/collective/model.hpp"
 #include "nexuslab/routing/router.hpp"
+#include "nexuslab/telemetry/session.hpp"
 #include <map>
 namespace nexuslab::collective {
 struct CollectiveConfiguration final {
@@ -24,7 +25,8 @@ struct CollectiveProgress final {
 class RingExecutor final : public CollectiveExecutor {
   public:
     RingExecutor(const topology::TopologyGraph& graph, routing::Router& router,
-                 CollectiveConfiguration configuration = {});
+                 CollectiveConfiguration configuration = {},
+                 telemetry::TelemetrySink telemetry = {});
     [[nodiscard]] CollectiveId submit(const CollectiveRequest& request,
                                       sim::SimulationContext& context) override;
     void cancel(CollectiveId id) override;
@@ -56,11 +58,19 @@ class RingExecutor final : public CollectiveExecutor {
     void start_round(Record& record, sim::SimulationContext& context);
     void issue(Record& record, const RingTransfer& transfer, sim::SimulationContext& context);
     void advance(Record& record, sim::SimulationContext& context);
-    void finish(Record& record, sim::SimTimeNs now);
+    void finish(Record& record, sim::SimulationContext& context);
     void trace(const Record& record, sim::SimTimeNs now);
+    void emit(const Record& record, telemetry::CollectiveTransition transition,
+              sim::SimulationContext& context,
+              std::optional<transport::TransferId> transfer = std::nullopt,
+              std::uint64_t bytes = 0);
+    void emit_counter(const Record& record, telemetry::MetricId metric, std::uint64_t amount,
+                      sim::SimulationContext& context,
+                      std::optional<transport::TransferId> transfer = std::nullopt);
     const topology::TopologyGraph* graph_;
     routing::Router* router_;
     CollectiveConfiguration configuration_;
+    telemetry::TelemetrySink telemetry_;
     std::size_t participant_entries_{0};
     std::uint64_t next_flow_{0};
     std::map<CollectiveId, Record> records_;

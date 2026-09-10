@@ -10,9 +10,10 @@ namespace nexuslab::workload {
 WorkloadEngine::WorkloadEngine(const topology::TopologyGraph& graph,
                                collective::CollectiveExecutor& executor, WorkloadLimits limits,
                                std::optional<scheduling::Configuration> scheduling,
-                               std::unique_ptr<scheduling::SchedulingPolicy> policy)
+                               std::unique_ptr<scheduling::SchedulingPolicy> policy,
+                               telemetry::TelemetrySink telemetry)
     : graph_{&graph}, executor_{&executor}, limits_{limits}, scheduling_{std::move(scheduling)},
-      policy_{std::move(policy)} {
+      policy_{std::move(policy)}, telemetry_{telemetry} {
     if (scheduling_.has_value()) {
         if (scheduling_->decision_entries == 0 || scheduling_->allocation_entries == 0 ||
             scheduling_->policy.empty() || scheduling_->policy.size() > 256) {
@@ -136,9 +137,11 @@ void WorkloadEngine::handle(const WorkloadEvent& event, sim::SimulationContext& 
     }
 }
 void WorkloadEngine::arrive(Record& record, sim::SimulationContext& context) {
+    emit_job(record, telemetry::JobTransition::Arrived, context);
     if (inventory_) {
         record.state = JobState::Waiting;
         trace(record, context.now(), "job_waiting");
+        emit_job(record, telemetry::JobTransition::Waiting, context);
         admission_pending_ = true;
         return;
     }
@@ -153,6 +156,7 @@ void WorkloadEngine::arrive(Record& record, sim::SimulationContext& context) {
     }
     record.assigned = true;
     record.allocated_at = context.now();
+    emit_job(record, telemetry::JobTransition::Admitted, context);
     start_step(record, context);
 }
 void WorkloadEngine::trace(const Record& record, sim::SimTimeNs now, std::string action) {
@@ -190,6 +194,7 @@ void WorkloadEngine::start_step(Record& record, sim::SimulationContext& context)
         }
     }
     trace(record, context.now(), "step_compute_started");
+    emit_job(record, telemetry::JobTransition::ComputeStarted, context);
 }
 void WorkloadEngine::compute_ready(Record& record, const WorkloadEvent& event,
                                    sim::SimulationContext& context) {
@@ -221,6 +226,7 @@ void WorkloadEngine::compute_ready(Record& record, const WorkloadEvent& event,
             record.state = JobState::Communicating;
         }
         trace(record, context.now(), "step_compute_finished");
+        emit_job(record, telemetry::JobTransition::ComputeCompleted, context, event.worker);
     }
     start_collective(record, context);
 }
@@ -240,6 +246,7 @@ void WorkloadEngine::start_collective(Record& record, sim::SimulationContext& co
     record.state = record.compute_complete == record.spec.workers.size() ? JobState::Communicating
                                                                          : JobState::Overlapping;
     trace(record, context.now(), "bucket_collective_started");
+    emit_job(record, telemetry::JobTransition::CollectiveStarted, context);
 }
 void WorkloadEngine::handle(const collective::CollectiveResult& completion,
                             sim::SimulationContext& context) {
@@ -254,17 +261,20 @@ void WorkloadEngine::handle(const collective::CollectiveResult& completion,
         return;
     }
     if (completion.outcome != collective::Phase::Succeeded) {
+        emit_job(record, telemetry::JobTransition::CollectiveCompleted, context);
         record.active_collective.reset();
         finish(record, JobState::Failed, completion.reason, context);
         return;
     }
     trace(record, context.now(), "bucket_collective_completed");
+    emit_job(record, telemetry::JobTransition::CollectiveCompleted, context);
     record.active_collective.reset();
     ++record.completed_buckets;
     if (record.completed_buckets == record.buckets) {
         for (const auto duration : record.spec.compute) {
             record.compute_gpu_ns = checked_sum(record.compute_gpu_ns, duration.count());
         }
+        emit_job(record, telemetry::JobTransition::StepCompleted, context);
         ++record.step;
         if (record.step == record.spec.steps) {
             finish(record, JobState::Succeeded, "all training steps completed", context);

@@ -48,7 +48,8 @@ TEST(TelemetryRecordTest, AssignsStableKindsToMetricDomainAndDecisionObservation
         TelemetryObservation{HistogramObservation{MetricId::JobCompletionTimeNs, {}, 1}},
         TelemetryObservation{SimulationObservation{SimulationTransition::RunStarted, 0}},
         TelemetryObservation{JobObservation{JobTransition::Arrived, 0, 0, 0, 0}},
-        TelemetryObservation{CollectiveObservation{CollectiveTransition::Submitted, 0, 0, 16}},
+        TelemetryObservation{CollectiveObservation{CollectiveTransition::Submitted,
+                                                   collective::Phase::ReduceScatter, 0, 16}},
         TelemetryObservation{
             TransferObservation{TransferTransition::Submitted, 16, 0, TransferReason::None}},
         TelemetryObservation{QueueObservation{QueueTransition::Enqueued, 16, 16, 1}},

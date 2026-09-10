@@ -3,7 +3,9 @@
 
 #include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/telemetry/session.hpp"
+#include "nexuslab/topology/families.hpp"
 #include "nexuslab/transport/runtime.hpp"
+#include "nexuslab/workload/dispatcher.hpp"
 #include "support/noop_dispatcher.hpp"
 
 #include <gtest/gtest.h>
@@ -289,6 +291,104 @@ TEST(TelemetryIntegrationTest, LinkFailureReportsDroppedTrafficAndPartialBusyTim
                    record.correlation.link == first_link;
         });
     EXPECT_EQ(dropped_records, 3);
+}
+
+[[nodiscard]] std::vector<transport::DirectedLinkConfiguration>
+training_links(const topology::TopologyGraph& graph) {
+    std::vector<transport::DirectedLinkConfiguration> links;
+    for (const topology::PhysicalLink& link : graph.links()) {
+        if (link.kind == topology::LinkKind::Fabric) {
+            for (const topology::DirectedLink& arc : topology::directed_links(link)) {
+                links.push_back({arc.id, transport::BitsPerSecond{8'000'000'000ULL},
+                                 sim::SimDurationNs{25}, transport::ByteCount{1'000'000},
+                                 std::nullopt});
+            }
+        }
+    }
+    return links;
+}
+
+// GTest assertion macros inflate clang-tidy's cognitive-complexity count.
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+TEST(TelemetryIntegrationTest, TrainingRunCorrelatesPlacementJobCollectiveRouteAndTransfer) {
+    TelemetryConfiguration configuration;
+    configuration.mode = TelemetryMode::Full;
+    TelemetrySession telemetry{configuration};
+    auto graph = topology::generate_two_gpu_direct();
+    transport::TransportRuntime transport{*graph, training_links(*graph), {}, telemetry.sink()};
+    routing::Router router{*graph, transport, routing::PolicyRegistry{}, {}, telemetry.sink()};
+    collective::RingExecutor collectives{*graph, router, {}, telemetry.sink()};
+    scheduling::Configuration scheduling;
+    workload::WorkloadEngine jobs{*graph, collectives, {}, scheduling, nullptr, telemetry.sink()};
+    workload::TrainingDispatcher dispatcher{jobs, collectives, transport};
+    sim::Simulation simulation{42, sim::TraceMode::Disabled, telemetry.sink()};
+    workload::JobSpec specification;
+    specification.name = "telemetry-training";
+    specification.requested_workers = 2;
+    specification.compute = {sim::SimDurationNs{1'000}, sim::SimDurationNs{1'000}};
+    specification.gradient_bytes = transport::ByteCount{100};
+    specification.bucket_bytes = transport::ByteCount{100};
+    specification.chunk_bytes = transport::ByteCount{100};
+    const workload::JobId job = jobs.schedule(specification, simulation);
+
+    const sim::SimulationResult result = simulation.run(dispatcher);
+    telemetry.finalize(result.final_time);
+
+    ASSERT_EQ(result.status, sim::SimulationStatus::Completed);
+    const auto snapshot = required(jobs.snapshot(job, result.final_time));
+    ASSERT_EQ(snapshot.state, workload::JobState::Succeeded);
+    const auto completion = required(telemetry.find_metric(MetricId::JobCompletionTimeNs));
+    EXPECT_EQ(completion.histogram_count, 1U);
+    EXPECT_EQ(completion.histogram_sum, snapshot.elapsed_ns);
+    EXPECT_EQ(required(telemetry.find_metric(MetricId::CollectivePlannedBytes)).scalar, 200U);
+    EXPECT_EQ(required(telemetry.find_metric(
+                           MetricId::RoutingDecisionTotal,
+                           {{MetricLabel::Policy, policy_label_value("ecmp")},
+                            {MetricLabel::Outcome,
+                             static_cast<std::uint64_t>(RoutingDecisionOutcome::Selected)}}))
+                  .scalar,
+              4U);
+    EXPECT_EQ(required(telemetry.find_metric(
+                           MetricId::PlacementDecisionTotal,
+                           {{MetricLabel::Policy, policy_label_value("first-fit")},
+                            {MetricLabel::Outcome,
+                             static_cast<std::uint64_t>(PlacementDecisionOutcome::Placed)}}))
+                  .scalar,
+              1U);
+
+    bool job_to_collective = false;
+    bool collective_to_transfer = false;
+    bool decision_to_transfer = false;
+    bool placement_to_job = false;
+    for (const TelemetryRecord& record : telemetry.records()) {
+        if (const auto* observation = std::get_if<JobObservation>(&record.observation)) {
+            job_to_collective =
+                job_to_collective ||
+                (observation->transition == JobTransition::CollectiveStarted &&
+                 record.correlation.job == job && record.correlation.collective.has_value());
+        }
+        if (const auto* observation = std::get_if<CollectiveObservation>(&record.observation)) {
+            collective_to_transfer =
+                collective_to_transfer ||
+                (observation->transition == CollectiveTransition::TransferIssued &&
+                 record.correlation.collective.has_value() &&
+                 record.correlation.transfer.has_value());
+        }
+        if (std::holds_alternative<RoutingDecisionObservation>(record.observation)) {
+            decision_to_transfer =
+                decision_to_transfer || (record.correlation.routing_decision.has_value() &&
+                                         record.correlation.transfer.has_value());
+        }
+        if (std::holds_alternative<PlacementDecisionObservation>(record.observation)) {
+            placement_to_job =
+                placement_to_job || (record.correlation.placement_decision.has_value() &&
+                                     record.correlation.job == job);
+        }
+    }
+    EXPECT_TRUE(job_to_collective);
+    EXPECT_TRUE(collective_to_transfer);
+    EXPECT_TRUE(decision_to_transfer);
+    EXPECT_TRUE(placement_to_job);
 }
 
 } // namespace

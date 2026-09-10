@@ -87,9 +87,11 @@ void WorkloadEngine::admit(Record& record, sim::SimulationContext& context) {
         allocation_entries_ += placement.workers.size();
         local = scheduling::locality(inventory_->view(), placement.workers);
     }
+    const telemetry::PlacementDecisionId decision_id{placements_.size()};
     placements_.push_back({record.id, context.now(), config.policy, 1, record.spec.priority,
                            requested, placement.outcome, placement.workers, placement.reason, local,
                            before, scheduling::fragmentation(inventory_->view())});
+    emit_placement(placements_.back(), decision_id, context);
     record.reason = placement.reason;
     if (placement.outcome == scheduling::PlacementOutcome::Rejected) {
         finish(record, JobState::Failed, placement.reason, context);
@@ -101,6 +103,7 @@ void WorkloadEngine::admit(Record& record, sim::SimulationContext& context) {
         record.assigned = true;
         record.allocated_at = context.now();
         trace(record, context.now(), "job_allocated");
+        emit_job(record, telemetry::JobTransition::Admitted, context);
         start_step(record, context);
     }
 }
