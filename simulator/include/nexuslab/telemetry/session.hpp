@@ -21,7 +21,7 @@ class TelemetrySink final {
 
     [[nodiscard]] bool enabled() const noexcept;
     void record(sim::SimTimeNs timestamp, Correlation correlation,
-                MetricObservation observation) const;
+                TelemetryObservation observation) const;
 
   private:
     friend class TelemetrySession;
@@ -43,7 +43,8 @@ class TelemetrySession final {
     [[nodiscard]] bool enabled() const noexcept;
     [[nodiscard]] TelemetrySink sink() noexcept;
 
-    void record(sim::SimTimeNs timestamp, Correlation correlation, MetricObservation observation);
+    void record(sim::SimTimeNs timestamp, Correlation correlation,
+                TelemetryObservation observation);
     void finalize(sim::SimTimeNs timestamp);
 
     [[nodiscard]] std::optional<MetricSeriesSnapshot>

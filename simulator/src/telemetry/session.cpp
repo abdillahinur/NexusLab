@@ -7,6 +7,7 @@
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 
 namespace nexuslab::telemetry {
 namespace {
@@ -18,7 +19,7 @@ namespace {
     return left + right;
 }
 
-void apply_observation(MetricRegistry& metrics, const MetricObservation& observation) {
+void apply_observation(MetricRegistry& metrics, const TelemetryObservation& observation) {
     std::visit(
         [&metrics](const auto& value) {
             using Observation = std::remove_cvref_t<decltype(value)>;
@@ -26,15 +27,14 @@ void apply_observation(MetricRegistry& metrics, const MetricObservation& observa
                 metrics.increment(value.metric, value.labels, value.amount);
             } else if constexpr (std::is_same_v<Observation, GaugeObservation>) {
                 metrics.set_gauge(value.metric, value.labels, value.value);
-            } else {
-                static_assert(std::is_same_v<Observation, HistogramObservation>);
+            } else if constexpr (std::is_same_v<Observation, HistogramObservation>) {
                 metrics.observe(value.metric, value.labels, value.value);
             }
         },
         observation);
 }
 
-void validate_observation(const MetricRegistry& metrics, const MetricObservation& observation) {
+void validate_observation(const MetricRegistry& metrics, const TelemetryObservation& observation) {
     std::visit(
         [&metrics](const auto& value) {
             using Observation = std::remove_cvref_t<decltype(value)>;
@@ -42,8 +42,7 @@ void validate_observation(const MetricRegistry& metrics, const MetricObservation
                 metrics.validate_increment(value.metric, value.labels, value.amount);
             } else if constexpr (std::is_same_v<Observation, GaugeObservation>) {
                 metrics.validate_set_gauge(value.metric, value.labels, value.value);
-            } else {
-                static_assert(std::is_same_v<Observation, HistogramObservation>);
+            } else if constexpr (std::is_same_v<Observation, HistogramObservation>) {
                 metrics.validate_observe(value.metric, value.labels, value.value);
             }
         },
@@ -61,7 +60,8 @@ struct TelemetrySession::Impl final {
         }
     }
 
-    void record(sim::SimTimeNs timestamp, Correlation correlation, MetricObservation observation) {
+    void record(sim::SimTimeNs timestamp, Correlation correlation,
+                TelemetryObservation observation) {
         if (configuration.mode == TelemetryMode::Off) {
             return;
         }
@@ -72,11 +72,16 @@ struct TelemetrySession::Impl final {
             throw std::invalid_argument{"telemetry observation timestamp regressed"};
         }
 
-        const bool retain = configuration.mode == TelemetryMode::Full;
+        const bool decision = is_decision_observation(observation);
+        const bool retain = configuration.mode == TelemetryMode::Full ||
+                            (configuration.mode == TelemetryMode::Sampled && decision);
         const std::size_t edges = correlation_edge_count(correlation);
         std::size_t next_edge_count = retained_edges;
         if (retain) {
-            if (records.size() >= configuration.limits.domain_records) {
+            if (decision && retained_decisions >= configuration.limits.decision_records) {
+                throw std::length_error{"telemetry decision record limit exceeded"};
+            }
+            if (!decision && retained_domain_records >= configuration.limits.domain_records) {
                 throw std::length_error{"telemetry domain record limit exceeded"};
             }
             next_edge_count = checked_add_size(retained_edges, edges);
@@ -93,8 +98,13 @@ struct TelemetrySession::Impl final {
         apply_observation(*metrics, observation);
         if (retain) {
             const TelemetryRecordId id{next_record_id};
-            records.push_back(TelemetryRecord{correlation, observation, id, timestamp});
+            records.push_back(TelemetryRecord{correlation, std::move(observation), id, timestamp});
             retained_edges = next_edge_count;
+            if (decision) {
+                ++retained_decisions;
+            } else {
+                ++retained_domain_records;
+            }
             if (next_record_id == std::numeric_limits<std::uint64_t>::max()) {
                 record_ids_exhausted = true;
             } else {
@@ -201,6 +211,8 @@ struct TelemetrySession::Impl final {
     std::optional<sim::SimTimeNs> last_timestamp;
     std::optional<sim::SimTimeNs> next_sample_timestamp;
     std::size_t retained_edges{0};
+    std::size_t retained_decisions{0};
+    std::size_t retained_domain_records{0};
     std::uint64_t next_record_id{0};
     bool record_ids_exhausted{false};
     bool is_finalized{false};
@@ -211,9 +223,9 @@ TelemetrySink::TelemetrySink(TelemetrySession& session) noexcept : session_{&ses
 bool TelemetrySink::enabled() const noexcept { return session_ != nullptr && session_->enabled(); }
 
 void TelemetrySink::record(sim::SimTimeNs timestamp, Correlation correlation,
-                           MetricObservation observation) const {
+                           TelemetryObservation observation) const {
     if (enabled()) {
-        session_->record(timestamp, correlation, observation);
+        session_->record(timestamp, correlation, std::move(observation));
     }
 }
 
@@ -231,8 +243,8 @@ bool TelemetrySession::enabled() const noexcept { return mode() != TelemetryMode
 TelemetrySink TelemetrySession::sink() noexcept { return TelemetrySink{*this}; }
 
 void TelemetrySession::record(sim::SimTimeNs timestamp, Correlation correlation,
-                              MetricObservation observation) {
-    implementation_->record(timestamp, correlation, observation);
+                              TelemetryObservation observation) {
+    implementation_->record(timestamp, correlation, std::move(observation));
 }
 
 void TelemetrySession::finalize(sim::SimTimeNs timestamp) { implementation_->finalize(timestamp); }
