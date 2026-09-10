@@ -30,7 +30,8 @@ std::uint64_t SimulationContext::random_below(std::uint64_t upper_exclusive) {
     return simulation_->random_below(upper_exclusive);
 }
 
-Simulation::Simulation(std::uint64_t seed, TraceMode trace_mode) : rng_{seed}, trace_{trace_mode} {}
+Simulation::Simulation(std::uint64_t seed, TraceMode trace_mode, telemetry::TelemetrySink telemetry)
+    : rng_{seed}, trace_{trace_mode}, telemetry_{telemetry} {}
 
 EventId Simulation::schedule(EventSpec specification) {
     if (lifecycle_ == Lifecycle::Finished) {
@@ -51,7 +52,7 @@ EventId Simulation::schedule(EventSpec specification) {
     }
 
     try {
-        if (trace_.enabled()) {
+        if (trace_.enabled() || telemetry_.enabled()) {
             metadata = event_trace_metadata(event);
             const auto [unused, metadata_inserted] = trace_metadata_.emplace(id.value(), *metadata);
             if (!metadata_inserted) {
@@ -67,6 +68,7 @@ EventId Simulation::schedule(EventSpec specification) {
     if (metadata.has_value()) {
         record_event(TraceAction::Scheduled, now_, *metadata);
     }
+    emit_simulation_observation(telemetry::SimulationTransition::EventScheduled, id, cause);
     return id;
 }
 
@@ -79,7 +81,7 @@ bool Simulation::cancel(EventId id) {
     }
 
     std::optional<EventTraceMetadata> metadata;
-    if (trace_.enabled()) {
+    if (trace_.enabled() || telemetry_.enabled()) {
         const auto position = trace_metadata_.find(id.value());
         if (position == trace_metadata_.end()) {
             throw std::logic_error{"missing event trace metadata"};
@@ -92,6 +94,10 @@ bool Simulation::cancel(EventId id) {
         return false;
     }
     ++cancelled_events_;
+    emit_simulation_observation(telemetry::SimulationTransition::EventCancelled, id,
+                                metadata.has_value() ? metadata->cause : std::nullopt);
+    emit_metric(
+        telemetry::CounterObservation{telemetry::MetricId::SimulationCancelledEvents, {}, 1});
     if (metadata.has_value()) {
         record_event(TraceAction::Cancelled, now_, *metadata);
     }
@@ -111,6 +117,8 @@ void Simulation::stop(StopReason reason) {
                          reason);
         }
         stop_reason_ = reason;
+        emit_simulation_observation(telemetry::SimulationTransition::StopRequested,
+                                    current_event_->id, current_event_->cause);
     }
 }
 
@@ -150,6 +158,66 @@ void Simulation::record_terminal(TraceAction action, const std::optional<std::st
         std::nullopt, error});
 }
 
+void Simulation::emit_simulation_observation(telemetry::SimulationTransition transition,
+                                             std::optional<EventId> event,
+                                             std::optional<EventId> cause) {
+    if (!telemetry_.enabled()) {
+        return;
+    }
+    telemetry::Correlation correlation;
+    correlation.event = event;
+    correlation.cause = cause;
+    try {
+        telemetry_.record(now_, correlation,
+                          telemetry::SimulationObservation{transition, pending_ids_.size() -
+                                                                           cancelled_ids_.size()});
+    } catch (...) {
+        telemetry_failed_ = true;
+        throw;
+    }
+}
+
+void Simulation::emit_metric(telemetry::TelemetryObservation observation) {
+    if (!telemetry_.enabled()) {
+        return;
+    }
+    telemetry::Correlation correlation;
+    if (current_event_.has_value()) {
+        correlation.event = current_event_->id;
+        correlation.cause = current_event_->cause;
+    }
+    try {
+        telemetry_.record(now_, correlation, std::move(observation));
+    } catch (...) {
+        telemetry_failed_ = true;
+        throw;
+    }
+}
+
+void Simulation::emit_terminal_telemetry(SimulationStatus status) {
+    if (!telemetry_.enabled() || telemetry_failed_) {
+        return;
+    }
+    telemetry::SimulationTransition transition = telemetry::SimulationTransition::RunFailed;
+    if (status == SimulationStatus::Completed) {
+        transition = telemetry::SimulationTransition::RunSucceeded;
+    } else if (status == SimulationStatus::Stopped) {
+        transition = telemetry::SimulationTransition::RunStopped;
+    }
+    emit_simulation_observation(
+        transition,
+        current_event_.has_value() ? std::optional<EventId>{current_event_->id} : std::nullopt,
+        current_event_.has_value() ? current_event_->cause : std::nullopt);
+    emit_metric(
+        telemetry::GaugeObservation{telemetry::MetricId::SimulationFinalTimeNs, {}, now_.count()});
+    emit_metric(telemetry::CounterObservation{
+        telemetry::MetricId::SimulationRngDraws, {}, rng_.draw_count()});
+    emit_metric(telemetry::CounterObservation{
+        telemetry::MetricId::SimulationTerminalTotal,
+        {{telemetry::MetricLabel::Outcome, static_cast<std::uint64_t>(status)}},
+        1});
+}
+
 void Simulation::begin_run() {
     if (lifecycle_ != Lifecycle::Created) {
         throw std::logic_error{"simulation can only be run once"};
@@ -174,6 +242,7 @@ std::optional<Event> Simulation::next_dispatchable_event() {
 }
 
 SimulationResult Simulation::finish(SimulationStatus status, std::optional<std::string> error) {
+    emit_terminal_telemetry(status);
     if (status == SimulationStatus::Completed) {
         record_terminal(TraceAction::Completed, std::nullopt);
     } else if (status == SimulationStatus::Failed) {
@@ -189,7 +258,15 @@ SimulationResult Simulation::finish(SimulationStatus status, std::optional<std::
 }
 
 SimulationResult Simulation::fail(std::string error) {
-    return finish(SimulationStatus::Failed, std::move(error));
+    try {
+        return finish(SimulationStatus::Failed, std::move(error));
+    } catch (const std::exception& telemetry_error) {
+        telemetry_failed_ = true;
+        return finish(SimulationStatus::Failed, telemetry_error.what());
+    } catch (...) {
+        telemetry_failed_ = true;
+        return finish(SimulationStatus::Failed, "unknown telemetry failure");
+    }
 }
 
 EventId Simulation::current_event_id() const {

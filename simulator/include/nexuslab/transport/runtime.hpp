@@ -5,6 +5,7 @@
 
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/sim/time.hpp"
+#include "nexuslab/telemetry/session.hpp"
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/transport/events.hpp"
 #include "nexuslab/transport/link_service.hpp"
@@ -106,7 +107,7 @@ class TransportRuntime final {
   public:
     TransportRuntime(topology::TopologyGraph& topology,
                      const std::vector<DirectedLinkConfiguration>& configurations,
-                     TransportLimits limits = {});
+                     TransportLimits limits = {}, telemetry::TelemetrySink telemetry = {});
 
     void register_chunk(RoutedChunk routed_chunk);
     [[nodiscard]] SubmittedTransfer submit_transfer(const TransferRequest& request,
@@ -160,7 +161,17 @@ class TransportRuntime final {
         std::optional<sim::SimTimeNs> started_at;
         std::optional<TransferCompletion> completion;
     };
-    void record_terminal(const ChunkRecord& record, sim::SimTimeNs now);
+    void record_terminal(const ChunkRecord& record, sim::SimulationContext& context);
+    void emit_transfer(const ChunkRecord& record, telemetry::TransferTransition transition,
+                       sim::SimulationContext& context,
+                       std::optional<topology::DirectedLinkId> link = std::nullopt,
+                       telemetry::TransferReason reason = telemetry::TransferReason::None);
+    void emit_queue(const ChunkRecord& record, topology::DirectedLinkId link,
+                    telemetry::QueueTransition transition, sim::SimulationContext& context);
+    void emit_link_metrics(topology::DirectedLinkId link, const LinkStatistics& before,
+                           const LinkStatistics& after, sim::SimulationContext& context);
+    void emit_queue_gauges(topology::DirectedLinkId link, const QueueSnapshot& snapshot,
+                           sim::SimulationContext& context);
     void reconcile_unavailable(sim::SimulationContext& context);
     void validate_capacity(std::size_t count, std::size_t hops) const;
     void validate_timing(ByteCount bytes, std::span<const topology::DirectedLinkId> route,
@@ -174,16 +185,18 @@ class TransportRuntime final {
     [[nodiscard]] DirectedLinkService& require_service(topology::DirectedLinkId link);
 
     void mark_dropped_link_down(const QueueDrain& drained, topology::DirectedLinkId link,
-                                sim::SimTimeNs now);
+                                sim::SimulationContext& context);
 
     topology::TopologyGraph* topology_;
     TransportLimits limits_;
+    telemetry::TelemetrySink telemetry_;
     std::size_t route_entries_{0};
     std::map<TransferId, TransferRecord> transfers_;
     std::vector<TransferCompletion> completions_;
     SequentialTransportIdGenerator<TransferId> transfer_ids_;
     SequentialTransportIdGenerator<ChunkId> chunk_ids_;
     std::map<topology::DirectedLinkId, DirectedLinkService> services_;
+    std::map<topology::DirectedLinkId, std::uint64_t> reported_busy_time_ns_;
     std::map<ChunkId, ChunkRecord> chunks_;
 };
 

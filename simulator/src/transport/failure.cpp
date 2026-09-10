@@ -59,8 +59,12 @@ void TransportRuntime::handle_switch_state_change(const SwitchStateChangeEvent& 
 void TransportRuntime::reconcile_unavailable(sim::SimulationContext& context) {
     for (auto& [id, service] : services_) {
         if (!topology_->is_operational(require_fabric_arc(id))) {
+            const LinkStatistics before = service.statistics(context.now());
             const auto drained = service.reconcile_down(context);
-            mark_dropped_link_down(drained, id, context.now());
+            const LinkStatistics after = service.statistics(context.now());
+            mark_dropped_link_down(drained, id, context);
+            emit_link_metrics(id, before, after, context);
+            emit_queue_gauges(id, service.queue().snapshot(), context);
         }
     }
 }

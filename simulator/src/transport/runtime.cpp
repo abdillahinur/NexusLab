@@ -15,8 +15,8 @@
 namespace nexuslab::transport {
 TransportRuntime::TransportRuntime(topology::TopologyGraph& topology,
                                    const std::vector<DirectedLinkConfiguration>& configurations,
-                                   TransportLimits limits)
-    : topology_{&topology}, limits_{limits} {
+                                   TransportLimits limits, telemetry::TelemetrySink telemetry)
+    : topology_{&topology}, limits_{limits}, telemetry_{telemetry} {
     if (limits.maximum_chunks == 0 || limits.maximum_route_entries == 0 ||
         limits.maximum_route_hops == 0) {
         throw std::invalid_argument{"transport limits must be positive"};
@@ -28,6 +28,7 @@ TransportRuntime::TransportRuntime(topology::TopologyGraph& topology,
         if (!inserted) {
             throw std::invalid_argument{"duplicate directed-link transport configuration"};
         }
+        reported_busy_time_ns_.emplace(configuration.link, 0);
     }
 }
 
@@ -131,6 +132,16 @@ sim::EventId TransportRuntime::schedule_initial_arrival(ChunkId chunk,
     auto& transfer = transfers_.at(record.chunk.transfer);
     if (!transfer.started_at.has_value()) {
         transfer.started_at = context.now();
+        if (telemetry_.enabled()) {
+            telemetry::Correlation correlation;
+            correlation.event = context.current_event_id();
+            correlation.cause = context.cause();
+            correlation.transfer = record.chunk.transfer;
+            telemetry_.record(context.now(), correlation,
+                              telemetry::TransferObservation{
+                                  telemetry::TransferTransition::Submitted, transfer.total.bytes, 0,
+                                  telemetry::TransferReason::None});
+        }
     }
     return event_id;
 }
@@ -170,29 +181,60 @@ void TransportRuntime::handle_arrival(const ChunkArrivalEvent& event,
     if (static_cast<std::size_t>(event.hop_index) == record.route.size()) {
         record.scheduled_arrival.reset();
         record.state = ChunkTransitState::Delivered;
-        record_terminal(record, context.now());
+        emit_transfer(record, telemetry::TransferTransition::ChunkDelivered, context);
+        record_terminal(record, context);
         return;
     }
 
     const topology::DirectedLinkId link = record.route[event.hop_index];
     const topology::DirectedLink directed = require_fabric_arc(link);
     if (!topology_->is_operational(directed)) {
-        require_service(link).record_link_down(record.chunk);
+        DirectedLinkService& service = require_service(link);
+        const LinkStatistics before = service.statistics(context.now());
+        service.record_link_down(record.chunk);
+        const LinkStatistics after = service.statistics(context.now());
         record.scheduled_arrival.reset();
         record.state = ChunkTransitState::DroppedLinkDown;
-        record_terminal(record, context.now());
+        emit_queue(record, link, telemetry::QueueTransition::Dropped, context);
+        emit_transfer(record, telemetry::TransferTransition::ChunkDropped, context, link,
+                      telemetry::TransferReason::ResourceDown);
+        emit_link_metrics(link, before, after, context);
+        emit_queue_gauges(link, service.queue().snapshot(), context);
+        record_terminal(record, context);
         return;
     }
 
     record.chunk.hop_index = event.hop_index;
-    const AdmissionResult admission = require_service(link).admit(record.chunk, context);
+    DirectedLinkService& service = require_service(link);
+    const LinkStatistics before = service.statistics(context.now());
+    const AdmissionResult admission = service.admit(record.chunk, context);
+    const LinkStatistics after = service.statistics(context.now());
     record.scheduled_arrival.reset();
     record.chunk.marked = record.chunk.marked || admission.marked_here;
     record.state = admission.disposition == AdmissionDisposition::DroppedBufferFull
                        ? ChunkTransitState::DroppedBufferFull
                        : ChunkTransitState::Admitted;
     if (record.state == ChunkTransitState::DroppedBufferFull) {
-        record_terminal(record, context.now());
+        emit_queue(record, link, telemetry::QueueTransition::Dropped, context);
+        emit_transfer(record, telemetry::TransferTransition::ChunkDropped, context, link,
+                      telemetry::TransferReason::BufferFull);
+    } else {
+        emit_queue(record, link, telemetry::QueueTransition::Enqueued, context);
+        if (admission.marked_here) {
+            emit_queue(record, link, telemetry::QueueTransition::Marked, context);
+        }
+        if (admission.disposition == AdmissionDisposition::ServiceStarted) {
+            emit_queue(record, link, telemetry::QueueTransition::ServiceStarted, context);
+            emit_transfer(record, telemetry::TransferTransition::ChunkServiceStarted, context,
+                          link);
+        } else {
+            emit_transfer(record, telemetry::TransferTransition::ChunkQueued, context, link);
+        }
+    }
+    emit_link_metrics(link, before, after, context);
+    emit_queue_gauges(link, service.queue().snapshot(), context);
+    if (record.state == ChunkTransitState::DroppedBufferFull) {
+        record_terminal(record, context);
     }
 }
 
@@ -207,6 +249,7 @@ void TransportRuntime::handle_completion(const TransmissionCompleteEvent& event,
     }
 
     DirectedLinkService& service = require_service(link);
+    const LinkStatistics before = service.statistics(context.now());
     const auto arrival_time =
         sim::checked_add(context.now(), service.queue().configuration().propagation_delay);
     if (!arrival_time.has_value()) {
@@ -215,11 +258,21 @@ void TransportRuntime::handle_completion(const TransmissionCompleteEvent& event,
     const sim::SimTimeNs validated_arrival_time = arrival_time.value();
 
     const ServiceTransition transition = service.handle_completion(event, context);
+    const LinkStatistics after = service.statistics(context.now());
     if (transition.completed.id != record.chunk.id) {
         throw std::logic_error{"completed service chunk does not match routed chunk"};
     }
 
     record.chunk = transition.completed;
+    emit_queue(record, link, telemetry::QueueTransition::ServiceCompleted, context);
+    emit_transfer(record, telemetry::TransferTransition::ChunkSerialized, context, link);
+    if (transition.next_started.has_value()) {
+        ChunkRecord& next = require_chunk(transition.next_started->id);
+        emit_queue(next, link, telemetry::QueueTransition::ServiceStarted, context);
+        emit_transfer(next, telemetry::TransferTransition::ChunkServiceStarted, context, link);
+    }
+    emit_link_metrics(link, before, after, context);
+    emit_queue_gauges(link, service.queue().snapshot(), context);
     ++record.hop_index;
     const sim::EventId arrival = context.schedule(sim::EventSpec{
         validated_arrival_time,
@@ -257,8 +310,12 @@ void TransportRuntime::handle_link_state_change(const LinkStateChangeEvent& even
         if (service == services_.end()) {
             continue;
         }
+        const LinkStatistics before = service->second.statistics(context.now());
         const QueueDrain drained = service->second.reconcile_down(context);
-        mark_dropped_link_down(drained, directed, context.now());
+        const LinkStatistics after = service->second.statistics(context.now());
+        mark_dropped_link_down(drained, directed, context);
+        emit_link_metrics(directed, before, after, context);
+        emit_queue_gauges(directed, service->second.queue().snapshot(), context);
     }
 }
 
@@ -354,8 +411,9 @@ DirectedLinkService& TransportRuntime::require_service(topology::DirectedLinkId 
 }
 
 void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
-                                              topology::DirectedLinkId link, sim::SimTimeNs now) {
-    const auto mark = [this, link, now](const TransferChunk& chunk) {
+                                              topology::DirectedLinkId link,
+                                              sim::SimulationContext& context) {
+    const auto mark = [this, link, &context](const TransferChunk& chunk) {
         ChunkRecord& record = require_chunk(chunk.id);
         if (record.state != ChunkTransitState::Admitted || record.hop_index != chunk.hop_index ||
             static_cast<std::size_t>(record.hop_index) >= record.route.size() ||
@@ -364,7 +422,10 @@ void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
         }
         record.chunk = chunk;
         record.state = ChunkTransitState::DroppedLinkDown;
-        record_terminal(record, now);
+        emit_queue(record, link, telemetry::QueueTransition::Dropped, context);
+        emit_transfer(record, telemetry::TransferTransition::ChunkDropped, context, link,
+                      telemetry::TransferReason::ResourceDown);
+        record_terminal(record, context);
     };
 
     if (drained.active.has_value()) {

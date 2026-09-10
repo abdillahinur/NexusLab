@@ -7,6 +7,7 @@
 #include "nexuslab/sim/event.hpp"
 #include "nexuslab/sim/event_queue.hpp"
 #include "nexuslab/sim/trace.hpp"
+#include "nexuslab/telemetry/session.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -66,7 +67,8 @@ class SimulationContext final {
 
 class Simulation final {
   public:
-    explicit Simulation(std::uint64_t seed, TraceMode trace_mode = TraceMode::Enabled);
+    explicit Simulation(std::uint64_t seed, TraceMode trace_mode = TraceMode::Enabled,
+                        telemetry::TelemetrySink telemetry = {});
     Simulation(const Simulation&) = delete;
     Simulation& operator=(const Simulation&) = delete;
     Simulation(Simulation&&) = delete;
@@ -100,6 +102,8 @@ class Simulation final {
 
         begin_run();
         try {
+            emit_simulation_observation(telemetry::SimulationTransition::RunStarted, std::nullopt,
+                                        std::nullopt);
             while (!stop_reason_.has_value()) {
                 auto next = next_dispatchable_event();
                 if (!next.has_value()) {
@@ -109,6 +113,10 @@ class Simulation final {
                 current_event_ = next;
                 now_ = next->timestamp;
                 ++dispatched_events_;
+                emit_simulation_observation(telemetry::SimulationTransition::EventDispatched,
+                                            next->id, next->cause);
+                emit_metric(telemetry::CounterObservation{
+                    telemetry::MetricId::SimulationDispatchedEvents, {}, 1});
                 if (trace_.enabled()) {
                     record_event(TraceAction::Dispatched, now_, event_trace_metadata(*next));
                 }
@@ -148,6 +156,10 @@ class Simulation final {
     void record_event(TraceAction action, SimTimeNs recorded_at, const EventTraceMetadata& metadata,
                       std::optional<StopReason> stop_reason = std::nullopt);
     void record_terminal(TraceAction action, const std::optional<std::string>& error);
+    void emit_simulation_observation(telemetry::SimulationTransition transition,
+                                     std::optional<EventId> event, std::optional<EventId> cause);
+    void emit_metric(telemetry::TelemetryObservation observation);
+    void emit_terminal_telemetry(SimulationStatus status);
     void begin_run();
     [[nodiscard]] std::optional<Event> next_dispatchable_event();
     [[nodiscard]] SimulationResult finish(SimulationStatus status,
@@ -163,6 +175,7 @@ class Simulation final {
     EventQueue event_queue_;
     DeterministicRng rng_;
     TraceLog trace_;
+    telemetry::TelemetrySink telemetry_;
     std::unordered_set<std::uint64_t> pending_ids_;
     std::unordered_set<std::uint64_t> cancelled_ids_;
     std::unordered_map<std::uint64_t, EventTraceMetadata> trace_metadata_;
@@ -171,6 +184,7 @@ class Simulation final {
     Lifecycle lifecycle_{Lifecycle::Created};
     std::uint64_t dispatched_events_{0};
     std::uint64_t cancelled_events_{0};
+    bool telemetry_failed_{false};
 };
 
 } // namespace nexuslab::sim

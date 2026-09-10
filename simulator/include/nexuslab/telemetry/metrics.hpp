@@ -149,6 +149,7 @@ enum class MetricId : std::uint8_t {
     LinkMaximumWaitingBytes = 62,
     LinkSerializerBusyNs = 63,
     LinkUtilizationPpm = 64,
+    TransferTerminalTotal = 70,
     RoutingDecisionTotal = 80,
     PlacementDecisionTotal = 81,
     PlacementCrossRackRingEdges = 82,

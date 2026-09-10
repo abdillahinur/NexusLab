@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 NexusLab contributors
 // SPDX-License-Identifier: Apache-2.0
 
+#include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/transport/runtime.hpp"
 #include "nexuslab/transport/timing.hpp"
 #include <stdexcept>
@@ -39,7 +40,8 @@ void TransportRuntime::validate_timing(ByteCount bytes,
     }
 }
 
-void TransportRuntime::record_terminal(const ChunkRecord& record, sim::SimTimeNs now) {
+void TransportRuntime::record_terminal(const ChunkRecord& record, sim::SimulationContext& context) {
+    const sim::SimTimeNs now = context.now();
     auto& transfer = transfers_.at(record.chunk.transfer);
     if (transfer.completion.has_value()) {
         throw std::logic_error{"transfer already completed"};
@@ -73,6 +75,30 @@ void TransportRuntime::record_terminal(const ChunkRecord& record, sim::SimTimeNs
                                             transfer.dropped_link_down};
         completions_.push_back(completion);
         transfer.completion = completion;
+        if (telemetry_.enabled()) {
+            telemetry::Correlation correlation;
+            correlation.event = context.current_event_id();
+            correlation.cause = context.cause();
+            correlation.transfer = record.chunk.transfer;
+            const auto transition = completion.outcome == TransferOutcome::Succeeded
+                                        ? telemetry::TransferTransition::Succeeded
+                                        : telemetry::TransferTransition::Failed;
+            telemetry::TransferReason reason = telemetry::TransferReason::None;
+            if (completion.dropped_buffer_full.chunks != 0) {
+                reason = telemetry::TransferReason::BufferFull;
+            } else if (completion.dropped_link_down.chunks != 0) {
+                reason = telemetry::TransferReason::ResourceDown;
+            }
+            telemetry_.record(
+                now, correlation,
+                telemetry::TransferObservation{transition, transfer.total.bytes, 0, reason});
+            telemetry_.record(
+                now, correlation,
+                telemetry::CounterObservation{telemetry::MetricId::TransferTerminalTotal,
+                                              {{telemetry::MetricLabel::Outcome,
+                                                static_cast<std::uint64_t>(completion.outcome)}},
+                                              1});
+        }
     }
 }
 

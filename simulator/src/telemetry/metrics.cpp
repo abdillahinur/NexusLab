@@ -33,7 +33,7 @@ constexpr std::array<std::uint64_t, 14> count_boundaries{
     0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1'024, 2'048, 8'192,
 };
 
-constexpr std::array<MetricDefinition, 44> definitions{{
+constexpr std::array<MetricDefinition, 45> definitions{{
     {MetricId::SimulationDispatchedEvents, "simulation_dispatched_events_total",
      "Events dispatched by the simulation kernel", MetricKind::Counter, MetricUnit::Count},
     {MetricId::SimulationCancelledEvents, "simulation_cancelled_events_total",
@@ -110,6 +110,8 @@ constexpr std::array<MetricDefinition, 44> definitions{{
     {MetricId::LinkUtilizationPpm, "link_utilization_ratio_ppm",
      "Link serializer utilization in parts per million", MetricKind::DerivedSummary,
      MetricUnit::RatioPartsPerMillion, link_labels, link_labels},
+    {MetricId::TransferTerminalTotal, "transfer_terminal_total", "Terminal transfer outcomes",
+     MetricKind::Counter, MetricUnit::Count, outcome_label, outcome_label},
     {MetricId::RoutingDecisionTotal, "routing_decision_total", "Routing decisions",
      MetricKind::Counter, MetricUnit::Count, policy_outcome_labels, policy_outcome_labels},
     {MetricId::PlacementDecisionTotal, "placement_decision_total", "Placement decisions",

@@ -86,6 +86,7 @@ enum class SimulationTransition : std::uint8_t {
     StopRequested = 5,
     RunSucceeded = 6,
     RunFailed = 7,
+    RunStopped = 8,
 };
 
 struct SimulationObservation final {
@@ -150,11 +151,17 @@ enum class TransferTransition : std::uint8_t {
     Failed = 8,
 };
 
+enum class TransferReason : std::uint8_t {
+    None = 0,
+    BufferFull = 1,
+    ResourceDown = 2,
+};
+
 struct TransferObservation final {
     TransferTransition transition;
     std::uint64_t bytes;
     std::uint32_t hop;
-    std::uint32_t reason;
+    TransferReason reason;
 
     bool operator==(const TransferObservation&) const = default;
 };

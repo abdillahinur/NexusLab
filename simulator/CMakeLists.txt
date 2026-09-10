@@ -15,6 +15,7 @@ add_library(
     src/transport/link_queue.cpp
     src/transport/link_service.cpp
     src/transport/runtime.cpp
+    src/transport/telemetry.cpp
     src/scheduling/inventory.cpp
     src/scheduling/policy.cpp
     src/workload/scheduling.cpp
@@ -72,6 +73,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/telemetry_records_test.cpp
         tests/telemetry_sampling_test.cpp
         tests/telemetry_session_test.cpp
+        tests/telemetry_integration_test.cpp
         tests/transport_event_test.cpp
         tests/transport_primitives_test.cpp
         tests/transport_runtime_test.cpp

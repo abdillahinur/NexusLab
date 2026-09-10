@@ -49,7 +49,8 @@ TEST(TelemetryRecordTest, AssignsStableKindsToMetricDomainAndDecisionObservation
         TelemetryObservation{SimulationObservation{SimulationTransition::RunStarted, 0}},
         TelemetryObservation{JobObservation{JobTransition::Arrived, 0, 0, 0, 0}},
         TelemetryObservation{CollectiveObservation{CollectiveTransition::Submitted, 0, 0, 16}},
-        TelemetryObservation{TransferObservation{TransferTransition::Submitted, 16, 0, 0}},
+        TelemetryObservation{
+            TransferObservation{TransferTransition::Submitted, 16, 0, TransferReason::None}},
         TelemetryObservation{QueueObservation{QueueTransition::Enqueued, 16, 16, 1}},
         TelemetryObservation{FailureObservation{FailureId{0}, FailureTransition::Scheduled,
                                                 FailureResourceKind::Link, 2, 0}},
