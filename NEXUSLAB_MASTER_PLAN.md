@@ -2090,6 +2090,13 @@ Adoption Stage 0; it does not establish a benchmark result on its own.
 
 Model predictable failures and measure policy response.
 
+## Design status — 2026-11-22
+
+[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) proposes the failure contract;
+[the execution plan](docs/design/failure-injection.md) defines slices and acceptance evidence.
+Design is recorded; implementation and Gate 9 remain pending. Accept the ADR before runtime
+changes. This does not narrow the MVP failures listed below.
+
 ## Dependencies
 
 - Clusters 2–4 topology, transport, routing, and operational revisions;
@@ -3838,6 +3845,11 @@ its owning cluster:
   and non-applied decision audit schema (Cluster 16).
 - ADR-018: Calibration/validity definitions for held-out policy-ranking correlation, disagreement
   reporting, and private-trace disclosure boundaries (Cluster 14; later Stage 3 work).
+
+Proposed:
+
+- [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md): deterministic failure scripts,
+  detection, recovery, capacity changes and attribution (Cluster 9); not yet accepted or implemented.
 
 Other planned topics receive an ADR number when work on the owning cluster begins:
 

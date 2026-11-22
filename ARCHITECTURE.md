@@ -13,6 +13,14 @@ Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-appr
 subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
+## Cluster 9 proposed contract
+
+[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) records the proposed deterministic
+failure lifecycle, immediate detection, explicit loss/recovery, capacity changes, script identity
+and telemetry contract. [The implementation plan](docs/design/failure-injection.md) maps existing
+owners to bounded implementation slices and analytical acceptance tests. These are design
+documents; the approved implementation remains Clusters 0–8 and Gate 9 is pending.
+
 ## System boundary
 
 NexusLab is the open, single-process, deterministic counterfactual experimentation lab for
