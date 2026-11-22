@@ -22,6 +22,9 @@ RingExecutor::RingExecutor(const topology::TopologyGraph& graph, routing::Router
         throw std::invalid_argument{"invalid collective configuration"};
     }
 }
+std::vector<NoRouteAdmission> RingExecutor::take_no_route_admissions() {
+    return std::exchange(no_route_admissions_, {});
+}
 CollectiveId RingExecutor::submit(const CollectiveRequest& request,
                                   sim::SimulationContext& context) {
     if (request.participants.empty() || request.participants.size() > 8192 ||
@@ -117,6 +120,10 @@ void RingExecutor::issue(Record& record, const RingTransfer& transfer,
                              record.request.chunk_bytes},
                             context);
         if (!submitted.has_value()) {
+            no_route_admissions_.push_back(
+                {record.result.id,
+                 {topology::NodeId{source}, topology::NodeId{destination}},
+                 context.now()});
             record.failed = true;
             record.result.reason = "no route for collective round";
             return;

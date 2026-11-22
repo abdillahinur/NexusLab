@@ -398,11 +398,10 @@ void Runtime::affect_job(std::size_t index, workload::JobId job) {
     incident.affected_jobs.push_back(job);
     affected_.emplace(incident.id, job);
 }
-void Runtime::on_down_drop(const transport::DownDrop& drop) {
-    const auto* link = graph_->find(drop.link.link);
+std::size_t Runtime::blocking_incident(const topology::PhysicalLink& link) const {
     std::vector<ResourceKey> keys{
-        {1, drop.link.link.value()}, {2, link->endpoint_a.value()}, {2, link->endpoint_b.value()}};
-    for (const auto port : {link->endpoint_a, link->endpoint_b}) {
+        {1, link.id.value()}, {2, link.endpoint_a.value()}, {2, link.endpoint_b.value()}};
+    for (const auto port : {link.endpoint_a, link.endpoint_b}) {
         const auto owner = graph_->find(port)->owner;
         if (owner.kind() == topology::NodeKind::Switch) {
             keys.emplace_back(3, owner.value());
@@ -417,6 +416,12 @@ void Runtime::on_down_drop(const transport::DownDrop& drop) {
             selected = std::min(selected, found->second);
         }
     }
+    return selected;
+}
+void Runtime::on_down_drop(const transport::DownDrop& drop) {
+    const auto* link = graph_->find(drop.link.link);
+    const auto not_found = report_.incidents.size();
+    const auto selected = blocking_incident(*link);
     if (selected == not_found) {
         return;
     }

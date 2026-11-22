@@ -294,3 +294,17 @@ Request k is injected at `at_ns + k * interval_ns`. Both kinds use the same boun
 checkpoint identifies traffic provenance and does not model storage consistency or job restart.
 The human report includes declared sources, requested sizes, schedules, injection/completion times,
 transfer IDs and delivered/buffer-drop/down-drop bytes. Pending requests have no completion time.
+
+### No-route incident attribution
+
+`nexuslab train --file examples/training/no-route-recovery.yaml --timeline` intentionally exits 1.
+The first job fails its admission during the outage; its incident has one affected job and zero
+dropped bytes/chunks, because no transfer was created. A later job and background request succeed
+after restoration. A no-route background request retains its own outcome and adds no fake job.
+
+For collective admissions, choose the lowest active down incident whose link, port or switch
+blocks an arc on any healthy-topology minimum-hop fabric path. Declaration ID wins over onset
+order. Recovered incidents, degradation and failures only on longer paths do not qualify. This
+rule is independent of the selected routing policy and candidate enumeration limits, and does not
+claim a single incident was the sole cause. The normal affected-job pair limit still applies.
+Catalog-v2 export/reconstruction remains pending; use the domain report and human timeline.

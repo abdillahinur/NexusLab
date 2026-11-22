@@ -22,6 +22,12 @@ struct CollectiveProgress final {
     std::uint64_t delivered_bytes;
     std::optional<CollectiveResult> completion;
 };
+// Admission failures have no transfer ID; composition resolves job ownership after submit returns.
+struct NoRouteAdmission final {
+    CollectiveId collective;
+    routing::Endpoints endpoints;
+    sim::SimTimeNs timestamp;
+};
 class RingExecutor final : public CollectiveExecutor {
   public:
     RingExecutor(const topology::TopologyGraph& graph, routing::Router& router,
@@ -34,6 +40,7 @@ class RingExecutor final : public CollectiveExecutor {
     void handle(const LocalCompletionEvent& event, sim::SimulationContext& context);
     void handle(const transport::TransferCompletion& completion, sim::SimulationContext& context);
     [[nodiscard]] std::vector<CollectiveResult> take_completed() override;
+    [[nodiscard]] std::vector<NoRouteAdmission> take_no_route_admissions();
     [[nodiscard]] std::optional<CollectiveProgress> snapshot(CollectiveId id) const;
     [[nodiscard]] std::span<const CollectiveTimeline> timeline() const noexcept;
 
@@ -78,6 +85,7 @@ class RingExecutor final : public CollectiveExecutor {
     std::map<transport::TransferId, Pending> transfers_;
     std::map<sim::EventId, LocalPending> locals_;
     std::vector<CollectiveResult> completed_;
+    std::vector<NoRouteAdmission> no_route_admissions_;
     std::vector<CollectiveTimeline> timeline_;
 };
 } // namespace nexuslab::collective

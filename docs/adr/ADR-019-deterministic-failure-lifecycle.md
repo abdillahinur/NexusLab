@@ -12,7 +12,7 @@ it does not record complete implementation or Gate 9 approval. ADR-012 through A
 numbers. The [execution plan](../design/failure-injection.md) defines the implementation slices and
 acceptance evidence. The master plan's complete Cluster 9 scope remains required.
 Link/port/switch/GPU incidents, capacity degradation and bounded background loads are implemented.
-No-route job attribution and catalog-v2 serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
+No-route job attribution is implemented; catalog-v2 serialization remains pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
 explicitly; domain reports and human timelines are the supported failure evidence.
 
 ## Context
@@ -189,6 +189,23 @@ no chunk was admitted. Already terminal jobs and buffer-full drops are not retro
 For a no-route decision, attribute to the lowest active down incident that disables an arc on a
 healthy-topology minimum-hop candidate; if none qualifies, record no incident attribution. This is
 a deterministic attribution rule, not proof that any single incident was the sole cause.
+
+Collective no-route admissions retain the collective ID, fabric endpoints and timestamp until the
+training dispatcher resolves ownership after submit returns and before consuming terminal results.
+There is at most one such admission per failed collective, bounded by maximum_collectives; the
+composition drains admissions on each outcome-pump pass even without a failure runtime. Two
+structural fabric BFS traversals classify every healthy minimum-hop arc without enumerating or
+truncating route candidates. Current active link/port/switch causes are checked on those arcs;
+capacity degradation and GPU health do not qualify as fabric down causes. Recovered incidents,
+unrelated/nonminimum-path failures and already terminal/unowned jobs add no affected-job pair.
+The existing affected-job bound applies, and exhaustion fails the simulation explicitly. No new
+transfer, dropped bytes or dropped chunks are fabricated. Background requests retain their own
+no-route outcomes without becoming jobs; per-admission incident provenance in exported records
+remains part of the pending catalog-v2 work.
+
+This completes an existing affected-job field's semantics. No digest field or encoding changes:
+v1/v2/v3/v4 layouts and script goldens remain fixed; newly attributed runs correctly hash the
+additional affected-job pair through the existing encoding.
 
 Link degradation contributes zero to the existing failure_affected_traffic_bytes_total: that metric
 counts failure-attributed dropped bytes, not slowed traffic volume. No incident-linked affected-job

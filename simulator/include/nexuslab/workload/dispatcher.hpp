@@ -91,6 +91,11 @@ class TrainingDispatcher final {
         }
         for (;;) {
             jobs_.dispatch_waiting(context);
+            for (const auto& admission : collectives_.take_no_route_admissions()) {
+                if (failures_ != nullptr) {
+                    failures_->attribute_no_route(admission);
+                }
+            }
             const auto completed = collectives_.take_completed();
             if (completed.empty()) {
                 break;

@@ -2095,8 +2095,8 @@ Model predictable failures and measure policy response.
 [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) accepts the failure contract;
 [the execution plan](docs/design/failure-injection.md) defines slices and acceptance evidence.
 Deterministic link down/up, degraded capacity, port/switch failures and persistent GPU health are
-implemented, with bounded drop/job attribution and executable recovery scenarios. Background
-loads, no-route attribution, catalog-v2 export and Gate 9 remain pending. This does not narrow the MVP failures below.
+implemented, with bounded drop/job attribution and executable recovery scenarios. Bounded
+background loads and no-route job attribution are implemented; catalog-v2 export and Gate 9 remain pending. This does not narrow the MVP failures below.
 
 ## Dependencies
 
@@ -3830,7 +3830,7 @@ Accepted:
 - ADR-010: Define bounded admission scheduling and GPU placement.
 - ADR-011: Define the deterministic telemetry and observability boundary.
 - [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md): deterministic failure scripts,
-  detection, recovery, capacity changes and attribution (Cluster 9; resource/capacity/background-load slices implemented).
+  detection, recovery, capacity changes and attribution (Cluster 9; resource/capacity/background-load/no-route attribution slices implemented).
 
 Reserved; each document remains proposed and must be written and accepted before implementation of
 its owning cluster:
@@ -5096,7 +5096,7 @@ simulation, networking, distributed systems, observability, benchmarking, and fa
 | 6 | Collective Communication Engine | Complete | Yes |
 | 7 | Scheduler and GPU Placement | Complete | Yes |
 | 8 | Telemetry and Observability | Complete | Yes |
-| 9 | Failure Injection and Recovery | In Progress — resource/capacity/background-load slices implemented | No |
+| 9 | Failure Injection and Recovery | In Progress — resource/capacity/background-load/no-route attribution slices implemented | No |
 | 10 | Congestion-Control Framework | Not Started | No |
 | 11 | Experiment Orchestrator | Not Started | No |
 | 12 | Result Store and Replay Format | Not Started | No |

@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Cluster 9 implementation and acceptance plan
 
-Status: link, resource, capacity and background-load slices implemented — 2026-11-22.
+Status: link, resource, capacity, background-load and no-route job attribution slices implemented — 2026-11-22.
 [ADR-019](../adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. Cluster 9 is in progress,
 not complete or gate-approved. Clusters 0–8 remain approved; the full
 scientific plan has 25 clusters, so 9/25 (36%) is a cluster-count proxy, not an effort estimate.
@@ -29,8 +29,7 @@ Cross-cutting work already exists without separate cluster gates. This implement
 The parser accepts link_down, link_degraded, port_down, switch_down and gpu_down, plus bounded
 burst/checkpoint loads. Load runs use outcome digest v4; resource/capacity runs retain v3 and prior
 link-only runs retain v2.
-No-route
-job attribution and catalog-v2 telemetry export remain future work. JSON/JSONL CLI export rejects
+No-route job attribution is implemented. Catalog-v2 telemetry export remains future work. JSON/JSONL CLI export rejects
 scripted runs; the underlying catalog-v1 telemetry snapshot contains only existing domain metrics,
 not a complete failure report. No full-trace reconstruction claim is made for incident state yet.
 The added capacity fields use a separate v3 digest layout; prior v1/v2 encodings remain unchanged.
@@ -44,7 +43,8 @@ The [resource/capacity slice evidence](../benchmarks/cluster-9-resource-capacity
 active-rate snapshots, asymmetric restoration, cross-resource overlap, persistent GPU health,
 capacity-aware route choices, mode invariance, and preflight overflow rejection. Slice 3 below is
 implemented. Slice 4 is also implemented; see the [background load evidence](../benchmarks/cluster-9-background-load-slice.md).
-No-route job attribution and final telemetry/comparison/gate evidence remain open.
+No-route job attribution is also implemented; see [attribution evidence](../benchmarks/cluster-9-no-route-attribution-slice.md).
+Final telemetry/comparison/gate evidence remains open.
 
 ## Existing boundaries to reuse
 

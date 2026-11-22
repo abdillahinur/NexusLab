@@ -1,0 +1,19 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 64
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+buffer_bytes: 100000
+jobs:
+  - {name: blocked-admission, workers: [0, 8], compute_ns: 1000, gradient_bytes: 4000, bucket_bytes: 4000, chunk_bytes: 1000}
+  - {name: after-restoration, workers: [0, 8], arrival_ns: 6000, compute_ns: 1000, gradient_bytes: 4000, bucket_bytes: 4000, chunk_bytes: 1000}
+failure_script:
+  version: 1
+  detection: immediate
+  incidents:
+    - {kind: switch_down, target: 0, at_ns: 0, recover_at_ns: 5000}
+  loads:
+    - {kind: checkpoint, source_gpu: 16, destination_gpu: 24, at_ns: 1000, count: 2, interval_ns: 6000, bytes_per_transfer: 1000, chunk_bytes: 1000}

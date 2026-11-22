@@ -4,6 +4,7 @@
 add_library(
     nexuslab_core STATIC
     src/failures/runtime.cpp
+    src/failures/attribution.cpp
     src/traffic/runtime.cpp
     src/sim/deterministic_rng.cpp
     src/sim/event_id.cpp

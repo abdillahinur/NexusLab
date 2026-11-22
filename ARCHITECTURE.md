@@ -26,7 +26,9 @@ snapshots. Typed capacity event kind 9 fits the unchanged 72-byte event envelope
 targets and resource keys preserve overlap semantics; restoration never overrides another down cause.
 
 The [implementation plan](docs/design/failure-injection.md) distinguishes these slices from pending
-no-route job attribution and catalog-v2 reconstruction/export. Bounded burst/checkpoint sources
+catalog-v2 reconstruction/export. No-route collective admissions now contribute an affected-job
+pair to the lowest active down incident on any healthy minimum-hop fabric candidate, without
+creating transfer/drop facts. Structural BFS avoids routing candidate truncation. Bounded burst/checkpoint sources
 share routing/transport queues with training, use separate completion ownership, and retain exact
 request outcomes independently of telemetry. Load scripts use outcome digest v4; typed injection
 event kind 10 preserves the existing event envelope and prior kinds. Scripted CLI JSON

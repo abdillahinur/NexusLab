@@ -5,6 +5,7 @@
 #include "nexuslab/topology/clos.hpp"
 #include "nexuslab/topology/families.hpp"
 #include "nexuslab/workload/digest.hpp"
+#include "nexuslab/workload/dispatcher.hpp"
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -685,6 +686,179 @@ TEST(FailureTest, ReservedCapacityRejectsOverflowBeforeAllocatingTransferIds) {
     static_cast<void>(
         simulation.schedule({sim::SimTimeNs{0}, sim::EventPriority::Normal, sim::NoOpEvent{0}}));
     equal(simulation.run(dispatcher).status, sim::SimulationStatus::Completed);
+}
+
+workload::TrainingScenario no_route_scenario() {
+    return workload::parse_scenario(R"(version: 1
+gpus: 64
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+jobs:
+  - {name: blocked-admission, workers: [0, 8], compute_ns: 1000, gradient_bytes: 4000, bucket_bytes: 4000, chunk_bytes: 1000}
+)");
+}
+topology::DirectedLink source_fabric(const topology::TopologyGraph& graph) {
+    for (const auto& arc : graph.outgoing(topology::NodeId{topology::NicId{0}})) {
+        if (graph.find(arc.id.link)->kind == topology::LinkKind::Fabric) {
+            return arc;
+        }
+    }
+    throw std::logic_error{"missing source fabric arc"};
+}
+TEST(FailureTest, UnroutableJobsAttributeLinkPortAndSwitchWithoutFabricatedDrops) {
+    const auto graph = topology::generate_clos({64, 8, 8, 8});
+    const auto arc = source_fabric(*graph);
+    const auto sw = topology::SwitchId{graph->find(arc.destination)->owner.value()};
+    for (const auto& incident : std::vector<Incident>{
+             {arc.id.link, sim::SimTimeNs{0}, sim::SimTimeNs{5000}},
+             {arc.source, sim::SimTimeNs{0}, sim::SimTimeNs{5000}, Kind::PortDown},
+             {sw, sim::SimTimeNs{0}, sim::SimTimeNs{5000}, Kind::SwitchDown}}) {
+        auto scenario = no_route_scenario();
+        scenario.failure_script = Script{{incident}};
+        auto later = scenario.jobs.front();
+        later.arrival = sim::SimTimeNs{6000};
+        scenario.jobs.push_back(later);
+        const auto report = workload::run_training(scenario);
+        equal(report.jobs.front().state, workload::JobState::Failed);
+        equal(report.jobs.back().state, workload::JobState::Succeeded);
+        const auto failures = required(report.failures);
+        equal(failures.incidents.front().affected_jobs, std::vector{workload::JobId{0}});
+        equal(failures.incidents.front().dropped.bytes, 0U);
+        equal(failures.drops.size(), 0U);
+        equal(report.decisions.front().transfer.has_value(), false);
+        equal(report.decisions.front().candidates, 0U);
+    }
+}
+TEST(FailureTest, UnroutableAttributionUsesDeclarationOrderAndCurrentRecoveryState) {
+    const auto graph = topology::generate_clos({64, 8, 8, 8});
+    const auto arc = source_fabric(*graph);
+    auto scenario = no_route_scenario();
+    scenario.failure_script = Script{
+        {{topology::SwitchId{0}, sim::SimTimeNs{500}, sim::SimTimeNs{2000}, Kind::SwitchDown},
+         {arc.id.link, sim::SimTimeNs{0}, sim::SimTimeNs{5000}}}};
+    for (const auto arrival : {2500U, 6000U}) {
+        auto job = scenario.jobs.front();
+        job.arrival = sim::SimTimeNs{arrival};
+        scenario.jobs.push_back(job);
+    }
+    const auto report = workload::run_training(scenario);
+    const auto failures = required(report.failures);
+    equal(failures.incidents.at(0).affected_jobs, std::vector{workload::JobId{0}});
+    equal(failures.incidents.at(1).affected_jobs, std::vector{workload::JobId{1}});
+    equal(report.jobs.at(2).state, workload::JobState::Succeeded);
+    equal(failures.drops.size(), 0U);
+}
+TEST(FailureTest, UnroutableAttributionExcludesNonminimumPathsAndCapacityImpairments) {
+    const auto graph = topology::generate_clos({64, 8, 8, 8});
+    const auto arc = source_fabric(*graph);
+    auto scenario = no_route_scenario();
+    scenario.failure_script =
+        Script{{{topology::SwitchId{1}, sim::SimTimeNs{0}, std::nullopt, Kind::SwitchDown},
+                {arc.id.link, sim::SimTimeNs{0}, std::nullopt, Kind::LinkDegraded,
+                 transport::BitsPerSecond{4'000'000'000ULL}},
+                {topology::SwitchId{0}, sim::SimTimeNs{0}, std::nullopt, Kind::SwitchDown}}};
+    const auto report = workload::run_training(scenario);
+    const auto failures = required(report.failures);
+    equal(failures.incidents.at(0).affected_jobs.size(), 0U);
+    equal(failures.incidents.at(1).affected_jobs.size(), 0U);
+    equal(failures.incidents.at(2).affected_jobs, std::vector{workload::JobId{0}});
+    equal(failures.drops.size(), 0U);
+}
+struct NoRouteFixture final {
+    std::unique_ptr<topology::TopologyGraph> graph;
+    transport::TransportRuntime transport;
+    routing::Router router;
+    collective::RingExecutor ring;
+    workload::WorkloadEngine jobs;
+    Runtime failures;
+    workload::TrainingDispatcher dispatcher;
+    sim::Simulation simulation{42};
+    NoRouteFixture(std::unique_ptr<topology::TopologyGraph> topology, const Script& script,
+                   Limits limits = {})
+        : graph{std::move(topology)}, transport{*graph, configuration(*graph)},
+          router{*graph, transport, routing::PolicyRegistry{}}, ring{*graph, router},
+          jobs{*graph, ring}, failures{script, *graph, transport, &ring, &jobs, limits},
+          dispatcher{jobs, ring, transport, &failures} {
+        failures.schedule(simulation);
+    }
+    void schedule(std::size_t count = 1) {
+        auto job = no_route_scenario().jobs.front();
+        job.workers = {topology::GpuId{0}, topology::GpuId{1}};
+        for (std::size_t i = 0; i < count; ++i) {
+            job.arrival = sim::SimTimeNs{i * 2000};
+            static_cast<void>(jobs.schedule(job, simulation));
+        }
+    }
+};
+TEST(FailureTest, UnscriptedDisconnectionHasNoIncidentAttribution) {
+    NoRouteFixture fixture{topology::generate_two_gpu_direct(), Script{}};
+    truth(fixture.graph->set_link_state(topology::LinkId{2}, topology::OperationalState::Down));
+    fixture.schedule();
+    equal(fixture.simulation.run(fixture.dispatcher).status, sim::SimulationStatus::Completed);
+    equal(fixture.jobs.take_completed().front().state, workload::JobState::Failed);
+    equal(fixture.failures.report().incidents.size(), 0U);
+    equal(fixture.ring.take_no_route_admissions().size(), 0U);
+}
+TEST(FailureTest, UnroutableAttributionExhaustionFailsExplicitly) {
+    NoRouteFixture fixture{topology::generate_two_gpu_direct(),
+                           Script{{{topology::LinkId{2}, sim::SimTimeNs{0}, std::nullopt}}},
+                           {10000, 1000000, 1}};
+    fixture.schedule(2);
+    const auto result = fixture.simulation.run(fixture.dispatcher);
+    equal(result.status, sim::SimulationStatus::Failed);
+    truth(required(result.error).find("affected-job limit") != std::string::npos);
+    equal(fixture.failures.report().incidents.front().affected_jobs.size(), 1U);
+    equal(fixture.failures.report().drops.size(), 0U);
+}
+TEST(FailureTest, HealthyMinimumPathAttributionIsNotTruncatedToRoutingCandidateLimit) {
+    auto graph = topology::generate_leaf_spine({2, 1, 1, 70});
+    const auto arc = source_fabric(*graph);
+    const auto last_spine = graph->switches().back().id;
+    NoRouteFixture fixture{std::move(graph),
+                           Script{{{last_spine, sim::SimTimeNs{0}, std::nullopt, Kind::SwitchDown},
+                                   {arc.id.link, sim::SimTimeNs{0}, std::nullopt}}}};
+    fixture.schedule();
+    equal(fixture.simulation.run(fixture.dispatcher).status, sim::SimulationStatus::Completed);
+    const auto report = fixture.failures.report();
+    equal(report.incidents.at(0).affected_jobs, std::vector{workload::JobId{0}});
+    equal(report.incidents.at(1).affected_jobs.size(), 0U);
+    equal(report.drops.size(), 0U);
+}
+TEST(FailureTest, UnroutableAttributionRepeatsAcrossModesAndDoesNotInventLoadJobs) {
+    auto scenario = no_route_scenario();
+    scenario.failure_script = Script{
+        {{topology::SwitchId{0}, sim::SimTimeNs{0}, std::nullopt, Kind::SwitchDown}},
+        {{traffic::Kind::Burst, topology::GpuId{16}, topology::GpuId{24}, sim::SimTimeNs{1000}, 1,
+          sim::SimDurationNs{0}, transport::ByteCount{1000}, transport::ByteCount{1000}}}};
+    const auto reference = workload::run_training(scenario);
+    equal(required(reference.failures).incidents.front().affected_jobs,
+          std::vector{workload::JobId{0}});
+    equal(reference.loads.front().outcome, traffic::Outcome::NoRoute);
+    equal(workload::resolved_domain_outcome_digest_version(reference), 4U);
+    for (const auto mode : {telemetry::TelemetryMode::Off, telemetry::TelemetryMode::Summary,
+                            telemetry::TelemetryMode::Sampled, telemetry::TelemetryMode::Full}) {
+        scenario.telemetry.mode = mode;
+        const auto report = workload::run_training(scenario);
+        equal(report.failures, reference.failures);
+        equal(workload::domain_outcome_digest(report), workload::domain_outcome_digest(reference));
+    }
+}
+TEST(FailureTest, CheckedInNoRouteRecoveryDemoPreservesNegativeCliOutcome) {
+    const auto path = std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path() /
+                      "examples/training/no-route-recovery.yaml";
+    const auto filename = path.string();
+    const std::array<std::string_view, 4> arguments{"train", "--file", filename, "--timeline"};
+    std::ostringstream output;
+    std::ostringstream error;
+    equal(cli::run(arguments, output, error), 1);
+    truth(output.str().find("job=0 state=failed") != std::string::npos);
+    truth(output.str().find("job=1 state=succeeded") != std::string::npos);
+    truth(output.str().find("dropped_bytes=0 dropped_chunks=0 affected_jobs=1") !=
+          std::string::npos);
+    truth(output.str().find("outcome=no_route") != std::string::npos);
+    truth(output.str().find("outcome=succeeded") != std::string::npos);
+    equal(error.str(), std::string{});
 }
 } // namespace
 } // namespace nexuslab::failures

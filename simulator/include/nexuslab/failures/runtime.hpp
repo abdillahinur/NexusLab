@@ -17,7 +17,8 @@ class Simulation;
 }
 namespace nexuslab::collective {
 class RingExecutor;
-}
+struct NoRouteAdmission;
+} // namespace nexuslab::collective
 namespace nexuslab::workload {
 class WorkloadEngine;
 }
@@ -121,6 +122,7 @@ class Runtime final : private transport::DownDropObserver {
     void handle(const workload::WorkloadEvent& event, sim::SimulationContext& context);
     [[nodiscard]] bool owns(sim::EventId event) const;
     [[nodiscard]] Report report() const;
+    void attribute_no_route(const collective::NoRouteAdmission& admission);
 
   private:
     void on_down_drop(const transport::DownDrop& drop) override;
@@ -131,6 +133,7 @@ class Runtime final : private transport::DownDropObserver {
     void apply(const sim::EventPayload& payload, sim::SimulationContext& context);
     void process(const sim::EventPayload& payload, sim::SimulationContext& context);
     void affect_job(std::size_t index, workload::JobId job);
+    [[nodiscard]] std::size_t blocking_incident(const topology::PhysicalLink& link) const;
     void transition(std::size_t index, telemetry::FailureTransition kind, sim::SimTimeNs now);
     topology::TopologyGraph* graph_;
     transport::TransportRuntime* transport_;
