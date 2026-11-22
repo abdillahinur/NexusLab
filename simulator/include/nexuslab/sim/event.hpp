@@ -6,6 +6,7 @@
 #include "nexuslab/collective/model.hpp"
 #include "nexuslab/sim/event_id.hpp"
 #include "nexuslab/sim/time.hpp"
+#include "nexuslab/traffic/events.hpp"
 #include "nexuslab/transport/events.hpp"
 #include "nexuslab/workload/events.hpp"
 
@@ -33,7 +34,8 @@ using EventPayload =
     std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent,
                  transport::LinkStateChangeEvent, transport::PortStateChangeEvent,
                  transport::SwitchStateChangeEvent, workload::WorkloadEvent,
-                 collective::LocalCompletionEvent, transport::LinkCapacityChangeEvent>;
+                 collective::LocalCompletionEvent, transport::LinkCapacityChangeEvent,
+                 traffic::InjectionEvent>;
 
 struct EventSpec final {
     SimTimeNs timestamp;

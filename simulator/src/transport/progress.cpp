@@ -9,6 +9,12 @@
 
 namespace nexuslab::transport {
 
+void TransportRuntime::preflight_timing(ByteCount bytes,
+                                        std::span<const topology::DirectedLinkId> route,
+                                        sim::SimTimeNs latest) const {
+    validate_timing(bytes, route, latest);
+}
+
 void TransportRuntime::validate_capacity(std::size_t count, std::size_t hops) const {
     if (hops > limits_.maximum_route_hops || count > limits_.maximum_chunks - chunks_.size() ||
         (hops != 0 && count > (limits_.maximum_route_entries - route_entries_) / hops)) {

@@ -17,6 +17,8 @@ struct TrainingReport final {
     std::vector<scheduling::PlacementDecision> placements;
     telemetry::TelemetrySnapshot telemetry;
     std::optional<failures::Report> failures{std::nullopt};
+    std::vector<traffic::Request> loads;
+    std::vector<traffic::Source> load_sources;
 };
 [[nodiscard]] TrainingReport run_training(const TrainingScenario& scenario);
 void write_report(const TrainingReport& report, std::ostream& output, bool include_timeline);

@@ -154,8 +154,14 @@ struct CommandStreams final {
         workload::write_report(report, streams.output,
                                arguments.size() == 4U && arguments[3] == "--timeline");
     }
-    return std::any_of(report.jobs.begin(), report.jobs.end(),
-                       [](const auto& job) { return job.state != workload::JobState::Succeeded; })
+    const bool load_failed =
+        std::any_of(report.loads.begin(), report.loads.end(), [](const auto& request) {
+            return request.outcome != traffic::Outcome::Succeeded;
+        });
+    return load_failed || std::any_of(report.jobs.begin(), report.jobs.end(),
+                                      [](const auto& job) {
+                                          return job.state != workload::JobState::Succeeded;
+                                      })
                ? 1
                : 0;
 }

@@ -99,6 +99,8 @@ class Simulation final {
                 std::is_invocable_v<Dispatcher&, const collective::LocalCompletionEvent&,
                                     SimulationContext&> &&
                 std::is_invocable_v<Dispatcher&, const transport::LinkCapacityChangeEvent&,
+                                    SimulationContext&> &&
+                std::is_invocable_v<Dispatcher&, const traffic::InjectionEvent&,
                                     SimulationContext&>,
             "dispatcher must handle every EventPayload alternative with SimulationContext");
 

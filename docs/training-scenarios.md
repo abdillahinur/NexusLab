@@ -42,7 +42,7 @@ scalars are unsigned and at most 20 characters. There are at most 10,000 jobs an
 | `telemetry` | Optional strict telemetry mapping; absence defaults to summary mode |
 | `jobs` | Required nonempty sequence of job mappings |
 | `controls` | Optional job cancellation/worker-failure event sequence |
-| `failure_script` | Optional version-1 immediate-detection resource/capacity script; nonempty loads currently rejected |
+| `failure_script` | Optional version-1 immediate-detection resource/capacity script with bounded burst/checkpoint loads |
 
 Topology uses eight GPUs per NIC and eight NICs per rack with eight spines. Thus GPU 0 and GPU 1
 share a NIC; GPU 0 and GPU 8 communicate through the fabric. These are explicit synthetic local
@@ -220,8 +220,8 @@ The optional failure_script mapping requires version: 1, detection: immediate an
 sequence (up to 10,000 entries). Each entry requires kind, a resource target and at_ns; the kind
 determines the target ID type. recover_at_ns is optional and must be later. IDs are declaration ordinals,
 starting at 1. Same-target episodes cannot overlap; adjacent episodes recover before the next onset.
-Missing restoration leaves the resource impaired. loads may be omitted or an empty sequence;
-background loads remain unsupported. Targets, existing health
+Missing restoration leaves the resource impaired. loads may be omitted, empty, or contain bounded
+burst/checkpoint sources as described below. Targets, existing health
 and overlap are validated against the generated graph before event registration. The topology
 structure must remain fixed throughout the run.
 
@@ -229,7 +229,7 @@ Active and queued chunks are dropped once; propagating chunks continue and check
 Recovery admits new work without retrying failed chunks, collectives or jobs. Incident snapshots,
 unique drop attribution and affected-job counts remain available even with telemetry off.
 Human output adds a fixed-width hexadecimal failure_script_digest; link-only runs use outcome
-digest v2, and new resource/capacity kinds use v3. Callers
+digest v2, resource/capacity kinds use v3, and nonempty loads use v4. Callers
 use resolved_domain_outcome_digest_version(report) with domain_outcome_digest(report). Without a
 script, legacy output and digest version 1 are preserved.
 
@@ -272,3 +272,25 @@ build/release/simulator/nexuslab train --file examples/training/link-degradation
 Use the build executable under NEXUSLAB_BUILD_ROOT when set. The examples are synthetic and do not
 model hardware fault detection or checkpoint restoration. Capacity/incident state is available in
 domain reports; complete catalog-v2 telemetry and scripted JSON/JSONL export remain pending.
+
+### Background burst and checkpoint loads
+
+Run `nexuslab train --file examples/training/background-loads.yaml --timeline` for a successful
+shared-queue example. `background-load-loss.yaml` intentionally exits 1: local training succeeds,
+but finite buffers drop background traffic. Any failed, no-route or pending load makes CLI status
+nonzero. Every request is reported even with telemetry off; no-route has no transfer or fake drops.
+
+Each `failure_script.loads` entry requires `kind` (`burst` or `checkpoint`), `source_gpu`,
+`destination_gpu`, `at_ns`, `count`, `interval_ns`, `bytes_per_transfer` and `chunk_bytes`.
+GPUs must exist on different NICs. Counts and sizes are positive; zero interval is valid. Checked
+arithmetic rejects schedule/aggregate-byte overflow before event registration. Limits are 10,000
+sources and 100,000 total requests, within the existing 1-MiB YAML bound. Transport and telemetry
+retention limits still apply independently and can fail a run explicitly.
+
+Source IDs are one-based declaration ordinals, separate from incident IDs. Request ordinals start
+at zero. Injection events are registered after workload/control events, ordered by timestamp,
+source ID and request ordinal at Normal priority. Critical incidents therefore apply first.
+Request k is injected at `at_ns + k * interval_ns`. Both kinds use the same bounded mechanism;
+checkpoint identifies traffic provenance and does not model storage consistency or job restart.
+The human report includes declared sources, requested sizes, schedules, injection/completion times,
+transfer IDs and delivered/buffer-drop/down-drop bytes. Pending requests have no completion time.

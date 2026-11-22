@@ -129,6 +129,8 @@ class TransportRuntime final {
     void handle_capacity_change(const LinkCapacityChangeEvent& event,
                                 sim::SimulationContext& context);
     [[nodiscard]] std::uint64_t capacity_revision() const noexcept;
+    void preflight_timing(ByteCount bytes, std::span<const topology::DirectedLinkId> route,
+                          sim::SimTimeNs latest) const;
     void register_chunk(RoutedChunk routed_chunk);
     [[nodiscard]] SubmittedTransfer submit_transfer(const TransferRequest& request,
                                                     sim::SimulationContext& context);

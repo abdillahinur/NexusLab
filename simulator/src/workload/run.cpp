@@ -23,6 +23,36 @@ void append_waiting_jobs(TrainingReport& report, const WorkloadEngine& jobs, std
         }
     }
 }
+void write_loads(const TrainingReport& report, std::ostream& output) {
+    for (std::size_t i = 0; i < report.load_sources.size(); ++i) {
+        const auto& source = report.load_sources[i];
+        output << "load_source=" << i + 1 << " kind=" << traffic::kind_name(source.kind)
+               << " source_gpu=" << source.source.value()
+               << " destination_gpu=" << source.destination.value()
+               << " at_ns=" << source.onset.count() << " count=" << source.count
+               << " interval_ns=" << source.interval.count()
+               << " bytes_per_transfer=" << source.bytes.value()
+               << " chunk_bytes=" << source.chunk_bytes.value() << '\n';
+    }
+    for (const auto& request : report.loads) {
+        output << "load_source=" << request.source.value() << " request=" << request.ordinal
+               << " scheduled_ns=" << request.scheduled.count()
+               << " outcome=" << traffic::outcome_name(request.outcome)
+               << " delivered_bytes=" << request.delivered.bytes
+               << " buffer_drop_bytes=" << request.dropped_buffer_full.bytes
+               << " down_drop_bytes=" << request.dropped_link_down.bytes;
+        if (request.injected.has_value()) {
+            output << " injected_ns=" << request.injected->count();
+        }
+        if (request.finished.has_value()) {
+            output << " finished_ns=" << request.finished->count();
+        }
+        if (request.transfer.has_value()) {
+            output << " transfer=" << request.transfer->value();
+        }
+        output << '\n';
+    }
+}
 } // namespace
 TrainingReport run_training(const TrainingScenario& scenario) {
     validate_failure_controls(scenario);
@@ -54,7 +84,11 @@ TrainingReport run_training(const TrainingScenario& scenario) {
         failures = std::make_unique<failures::Runtime>(*scenario.failure_script, *graph, transport,
                                                        &collectives, &jobs);
     }
-    TrainingDispatcher dispatcher{jobs, collectives, transport, failures.get()};
+    std::unique_ptr<traffic::Runtime> loads;
+    if (scenario.failure_script.has_value()) {
+        loads = std::make_unique<traffic::Runtime>(scenario.failure_script->loads, *graph, router);
+    }
+    TrainingDispatcher dispatcher{jobs, collectives, transport, failures.get(), loads.get()};
     const sim::TraceMode trace_mode = scenario.telemetry.mode == telemetry::TelemetryMode::Full
                                           ? sim::TraceMode::Enabled
                                           : sim::TraceMode::Disabled;
@@ -73,6 +107,9 @@ TrainingReport run_training(const TrainingScenario& scenario) {
         static_cast<void>(
             jobs.schedule_gpu_state(control.gpu, control.healthy, control.timestamp, simulation));
     }
+    if (loads) {
+        loads->schedule(simulation);
+    }
     const sim::SimulationResult simulation_result = simulation.run(dispatcher);
     telemetry_session.finalize(simulation_result.final_time);
     TrainingReport report{simulation_result,
@@ -83,7 +120,10 @@ TrainingReport run_training(const TrainingScenario& scenario) {
                           router.take_decisions(),
                           0,
                           {},
-                          telemetry_session.snapshot()};
+                          telemetry_session.snapshot(),
+                          std::nullopt,
+                          {},
+                          {}};
     if (report.simulation.status != sim::SimulationStatus::Completed) {
         throw std::runtime_error{
             report.simulation.error.value_or("training run did not finish all jobs")};
@@ -109,6 +149,8 @@ TrainingReport run_training(const TrainingScenario& scenario) {
     }
     if (failures) {
         report.failures = failures->report();
+        report.loads = loads->report();
+        report.load_sources = scenario.failure_script->loads;
     }
     return report;
 }
@@ -162,6 +204,7 @@ void write_report(const TrainingReport& report, std::ostream& output, bool inclu
                    << " capacity_revision=" << incident.capacity_revision << '\n';
         }
     }
+    write_loads(report, output);
     if (include_timeline) {
         if (report.failures.has_value()) {
             for (const auto& entry : report.failures->timeline) {

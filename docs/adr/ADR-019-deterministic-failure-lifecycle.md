@@ -11,8 +11,8 @@ Accepted — 2026-11-22 after contract review. This authorizes incremental Clust
 it does not record complete implementation or Gate 9 approval. ADR-012 through ADR-018 retain their reserved
 numbers. The [execution plan](../design/failure-injection.md) defines the implementation slices and
 acceptance evidence. The master plan's complete Cluster 9 scope remains required.
-Link/port/switch/GPU incidents and capacity degradation are implemented. Background loads,
-no-route attribution, and catalog-v2 serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
+Link/port/switch/GPU incidents, capacity degradation and bounded background loads are implemented.
+No-route job attribution and catalog-v2 serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
 explicitly; domain reports and human timelines are the supported failure evidence.
 
 ## Context
@@ -236,8 +236,20 @@ of this script digest. Comparison tests must hold complete resolved topology, wo
 transport parameters, seed and script fixed and vary only routing. Equal script digests alone do
 not prove controlled experiments. The domain outcome digest remains version 1 for legacy runs; link-only scripts retain version 2,
 and resource/capacity scripts use version 3 with explicit revision metadata. Incident state,
-effective health and attribution are domain facts even with telemetry off. Background loads
-require an explicit future digest-version decision when implemented. Preserve the old encoding and add new golden vectors; do not relabel old hashes.
+effective health and attribution are domain facts even with telemetry off. Load scripts use outcome
+version 4: retain the complete v3 prefix with the resolved version set to 4, then append the load
+request count and records in source/ordinal order. Each record encodes source ID, zero-based request
+ordinal, scheduled time, injected-presence/optional time, transfer-presence/optional ID, outcome
+(Pending 1, Succeeded 2, Failed 3, NoRoute 4), finished-presence/optional time, then delivered,
+buffer-drop and link-down-drop byte/chunk pairs. All values use u64 little-endian. Source
+specifications are already covered by the script digest. Preserve old v1/v2/v3 encodings.
+
+The background owner reserves flow keys with bit 63 set; collective flow allocation is restricted
+to the lower half, preserving all prior keys. Typed injection event kind 10 is appended without
+renumbering prior variants or trace kinds. Bootstrap timing checks use independent path lookup and
+the transport's minimum reserved capacities; they consume no routing decisions, IDs or RNG draws.
+Actual admissions validate timing again because outages can change paths and queue waits. The
+finite-buffer transport supplies drops; no separate generator backpressure or retry is invented.
 
 ## Consequences
 

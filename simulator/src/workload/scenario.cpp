@@ -160,6 +160,31 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
                 : std::nullopt,
             kind, bandwidth};
 }
+[[nodiscard]] traffic::Source read_load(const YAML::Node& node) {
+    keys(node, {"kind", "source_gpu", "destination_gpu", "at_ns", "count", "interval_ns",
+                "bytes_per_transfer", "chunk_bytes"});
+    for (const auto* key : {"kind", "source_gpu", "destination_gpu", "at_ns", "count",
+                            "interval_ns", "bytes_per_transfer", "chunk_bytes"}) {
+        if (!node[key]) {
+            throw std::invalid_argument{"missing background load field"};
+        }
+    }
+    if (!node["kind"].IsScalar()) {
+        throw std::invalid_argument{"load kind required"};
+    }
+    const auto kind = node["kind"].Scalar();
+    if (kind != "burst" && kind != "checkpoint") {
+        throw std::invalid_argument{"unknown background load kind"};
+    }
+    return {kind == "burst" ? traffic::Kind::Burst : traffic::Kind::Checkpoint,
+            topology::GpuId{number(node["source_gpu"])},
+            topology::GpuId{number(node["destination_gpu"])},
+            sim::SimTimeNs{number(node["at_ns"])},
+            number(node["count"]),
+            sim::SimDurationNs{number(node["interval_ns"])},
+            transport::ByteCount{number(node["bytes_per_transfer"])},
+            transport::ByteCount{number(node["chunk_bytes"])}};
+}
 [[nodiscard]] failures::Script read_failures(const YAML::Node& node) {
     keys(node, {"version", "detection", "incidents", "loads"});
     if (number(node["version"]) != 1 || !node["detection"].IsScalar() ||
@@ -167,14 +192,19 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
         throw std::invalid_argument{"failure script requires version 1 and immediate detection"};
     }
     const auto loads = node["loads"];
-    if (loads && (!loads.IsSequence() || loads.size() != 0)) {
-        throw std::invalid_argument{"background failure-script loads are not implemented"};
+    if (loads && (!loads.IsSequence() || loads.size() > 10'000)) {
+        throw std::invalid_argument{"background loads require a bounded sequence"};
     }
     const auto incidents = node["incidents"];
     if (!incidents.IsSequence() || incidents.size() > 10'000) {
         throw std::invalid_argument{"failure incidents require a bounded sequence"};
     }
     failures::Script result;
+    if (loads) {
+        for (const auto& load : loads) {
+            result.loads.push_back(read_load(load));
+        }
+    }
     for (const auto& incident : incidents) {
         result.incidents.push_back(read_incident(incident));
     }

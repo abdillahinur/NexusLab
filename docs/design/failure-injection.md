@@ -5,7 +5,7 @@ SPDX-License-Identifier: Apache-2.0
 
 # Cluster 9 implementation and acceptance plan
 
-Status: link, resource and capacity slices implemented — 2026-11-22.
+Status: link, resource, capacity and background-load slices implemented — 2026-11-22.
 [ADR-019](../adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. Cluster 9 is in progress,
 not complete or gate-approved. Clusters 0–8 remain approved; the full
 scientific plan has 25 clusters, so 9/25 (36%) is a cluster-count proxy, not an effort estimate.
@@ -20,14 +20,15 @@ Cross-cutting work already exists without separate cluster gates. This implement
 - A borrowed synchronous transport down-drop observer, disconnected by coordinator destruction.
   It reports facts without choosing routes or forwarding outcomes. Read-only collective/job owner
   lookups support bounded, unique chunk attribution and affected-job pairs independently of telemetry.
-- Legacy runs retain domain digest v1 and output; scripted reports resolve to digest v2 and include
+- Legacy runs retain domain digest v1 and output; link-only scripted reports resolve to digest v2 and include
   incident snapshots, lifecycle and drop facts. Use resolved_domain_outcome_digest_version(report)
   when consuming reports; the original constant describes legacy v1 only.
 - A checked-in 512-GPU spine-link demo, later admissions using surviving paths, restoration
   eligibility, and analytical tests for same-time cancellation, propagation and fatal retention limits.
 
-The parser now accepts link_down, link_degraded, port_down, switch_down and gpu_down. Nonempty
-loads remain rejected. Resource/capacity runs use outcome digest v3; prior link-only runs retain v2.
+The parser accepts link_down, link_degraded, port_down, switch_down and gpu_down, plus bounded
+burst/checkpoint loads. Load runs use outcome digest v4; resource/capacity runs retain v3 and prior
+link-only runs retain v2.
 No-route
 job attribution and catalog-v2 telemetry export remain future work. JSON/JSONL CLI export rejects
 scripted runs; the underlying catalog-v1 telemetry snapshot contains only existing domain metrics,
@@ -42,7 +43,8 @@ refinement adds typed capacity event kind 9 without increasing the event envelop
 The [resource/capacity slice evidence](../benchmarks/cluster-9-resource-capacity-slice.md) covers
 active-rate snapshots, asymmetric restoration, cross-resource overlap, persistent GPU health,
 capacity-aware route choices, mode invariance, and preflight overflow rejection. Slice 3 below is
-implemented; background loads and final telemetry/comparison/gate evidence remain open.
+implemented. Slice 4 is also implemented; see the [background load evidence](../benchmarks/cluster-9-background-load-slice.md).
+No-route job attribution and final telemetry/comparison/gate evidence remain open.
 
 ## Existing boundaries to reuse
 

@@ -139,6 +139,30 @@ void add_route(DigestBuilder& digest, const routing::RouteDecision& decision) no
     }
 }
 
+void add_load(DigestBuilder& digest, const traffic::Request& request) noexcept {
+    digest.add(request.source.value());
+    digest.add(request.ordinal);
+    digest.add(request.scheduled.count());
+    digest.add_bool(request.injected.has_value());
+    if (request.injected.has_value()) {
+        digest.add(request.injected->count());
+    }
+    digest.add_bool(request.transfer.has_value());
+    if (request.transfer.has_value()) {
+        digest.add(request.transfer->value());
+    }
+    digest.add_enum(request.outcome);
+    digest.add_bool(request.finished.has_value());
+    if (request.finished.has_value()) {
+        digest.add(request.finished->count());
+    }
+    digest.add(request.delivered.bytes);
+    digest.add(request.delivered.chunks);
+    digest.add(request.dropped_buffer_full.bytes);
+    digest.add(request.dropped_buffer_full.chunks);
+    digest.add(request.dropped_link_down.bytes);
+    digest.add(request.dropped_link_down.chunks);
+}
 void add_placement(DigestBuilder& digest, const scheduling::PlacementDecision& decision) noexcept {
     digest.add(decision.job.value());
     digest.add(decision.timestamp.count());
@@ -231,6 +255,9 @@ std::uint64_t domain_outcome_digest(const TrainingReport& report) noexcept {
         }
     }
 
+    if (report.failures.has_value() && report.failures->outcome_version >= 4) {
+        add_range(digest, report.loads, add_load);
+    }
     return digest.value();
 }
 

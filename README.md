@@ -70,8 +70,9 @@ Cluster 8's design is documented in
 [the telemetry design](docs/design/telemetry.md), and its evidence in
 [Architecture Gate 8](docs/architecture-gates/cluster-8.md). The [spine-link scenario](examples/training/spine-link-failure.yaml) now exercises immediate
 detection, transport drops, alternative routing for later admissions and restoration. Resource
-recovery and degradation examples are also available. Background loads and complete
-failure telemetry remain Cluster 9 work; see the
+recovery and degradation examples are also available. The [background-load example](examples/training/background-loads.yaml)
+adds bounded burst/checkpoint traffic with separate outcomes and shared-queue contention.
+Complete failure telemetry and no-route job attribution remain Cluster 9 work; see the
 [implementation status](docs/design/failure-injection.md).
 
 ## Explicit boundaries

@@ -13,7 +13,7 @@ Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-appr
 subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
-## Cluster 9 resource and capacity slices
+## Cluster 9 resource, capacity and traffic slices
 
 [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. Scripts support link
 down/up, link degradation, port/switch down/up and scheduler-owned persistent GPU failure/recovery.
@@ -26,7 +26,10 @@ snapshots. Typed capacity event kind 9 fits the unchanged 72-byte event envelope
 targets and resource keys preserve overlap semantics; restoration never overrides another down cause.
 
 The [implementation plan](docs/design/failure-injection.md) distinguishes these slices from pending
-background loads, no-route attribution and catalog-v2 reconstruction/export. Scripted CLI JSON
+no-route job attribution and catalog-v2 reconstruction/export. Bounded burst/checkpoint sources
+share routing/transport queues with training, use separate completion ownership, and retain exact
+request outcomes independently of telemetry. Load scripts use outcome digest v4; typed injection
+event kind 10 preserves the existing event envelope and prior kinds. Scripted CLI JSON
 export remains rejected. Clusters 0–8 remain gate-approved; Cluster 9 and Gate 9 remain open.
 
 ## System boundary

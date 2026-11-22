@@ -4,10 +4,12 @@
 
 #include "nexuslab/sim/event.hpp"
 #include "nexuslab/telemetry/records.hpp"
+#include "nexuslab/traffic/model.hpp"
 #include "nexuslab/transport/runtime.hpp"
 #include <array>
 #include <map>
 #include <set>
+#include <utility>
 #include <variant>
 
 namespace nexuslab::sim {
@@ -40,6 +42,11 @@ struct Incident final {
 using LinkIncident = Incident;
 struct Script final {
     std::vector<Incident> incidents;
+    std::vector<traffic::Source> loads;
+    Script() = default;
+    explicit Script(std::vector<Incident> incident_specs,
+                    std::vector<traffic::Source> load_specs = {})
+        : incidents{std::move(incident_specs)}, loads{std::move(load_specs)} {}
     bool operator==(const Script&) const = default;
 };
 [[nodiscard]] std::uint64_t target_value(const Target& target);

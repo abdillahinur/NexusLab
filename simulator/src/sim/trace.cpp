@@ -94,6 +94,8 @@ EventPayloadKind payload_kind(const EventPayload& payload) {
                 return EventPayloadKind::Workload;
             } else if constexpr (std::is_same_v<Payload, transport::LinkCapacityChangeEvent>) {
                 return EventPayloadKind::LinkCapacityChange;
+            } else if constexpr (std::is_same_v<Payload, traffic::InjectionEvent>) {
+                return EventPayloadKind::BackgroundInjection;
             } else {
                 static_assert(std::is_same_v<Payload, collective::LocalCompletionEvent>,
                               "event payload kind is not mapped");

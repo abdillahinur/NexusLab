@@ -107,7 +107,7 @@ void RingExecutor::issue(Record& record, const RingTransfer& transfer,
         emit_counter(record, telemetry::MetricId::CollectiveIssuedLocalBytes,
                      transfer.bytes.value(), context);
     } else {
-        if (next_flow_ == std::numeric_limits<std::uint64_t>::max()) {
+        if (next_flow_ >= (std::uint64_t{1} << 63U)) {
             throw std::overflow_error{"collective routing key exhausted"};
         }
         const auto submitted =

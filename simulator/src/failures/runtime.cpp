@@ -100,6 +100,7 @@ std::vector<Action> validate(const Script& script, const topology::TopologyGraph
         script.incidents.size() > limits.incidents) {
         throw std::length_error{"failure script limit exceeded"};
     }
+    static_cast<void>(traffic::validate(script.loads, graph));
     std::vector<std::size_t> order;
     std::vector<Action> actions;
     for (std::size_t i = 0; i < script.incidents.size(); ++i) {
@@ -176,7 +177,19 @@ std::uint64_t script_digest(const Script& script, const topology::TopologyGraph&
             integer(incident.bandwidth->value());
         }
     }
-    integer(0);
+    integer(script.loads.size());
+    for (std::size_t i = 0; i < script.loads.size(); ++i) {
+        const auto& load = script.loads[i];
+        integer(i + 1);
+        integer(static_cast<std::uint64_t>(load.kind));
+        integer(load.source.value());
+        integer(load.destination.value());
+        integer(load.onset.count());
+        integer(load.count);
+        integer(load.interval.count());
+        integer(load.bytes.value());
+        integer(load.chunk_bytes.value());
+    }
     return hash;
 }
 Runtime::Runtime(const Script& script, topology::TopologyGraph& graph,
@@ -219,6 +232,9 @@ Runtime::Runtime(const Script& script, topology::TopologyGraph& graph,
             transport.reserve_capacity(std::get<topology::LinkId>(incident.target),
                                        *incident.bandwidth);
         }
+    }
+    if (!script.loads.empty()) {
+        report_.outcome_version = 4;
     }
     transport_->set_down_drop_observer(this);
 }

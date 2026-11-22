@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "nexuslab/routing/router.hpp"
 #include "nexuslab/sim/simulation.hpp"
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <utility>
@@ -15,6 +16,14 @@ Router::Router(const topology::TopologyGraph& graph, transport::TransportRuntime
       telemetry_{telemetry} {
     if (configuration_.maximum_decisions == 0) {
         throw std::invalid_argument{"routing decision limit must be positive"};
+    }
+}
+void Router::preflight(const RouteRequest& request, sim::SimTimeNs latest) const {
+    PathService paths{*graph_, configuration_.paths};
+    for (const auto& path : paths.lookup(request.endpoints)) {
+        runtime_->preflight_timing(transport::ByteCount{std::min(
+                                       request.bytes.value(), request.maximum_chunk_bytes.value())},
+                                   path, latest);
     }
 }
 std::optional<transport::SubmittedTransfer> Router::submit(const RouteRequest& request,

@@ -11,6 +11,12 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Bounded burst/checkpoint background sources sharing routing/transport with training, separate
+  completion ownership, explicit pending/success/no-route/drop outcomes, checked injection bounds,
+  and nonzero CLI status for failed loads. Typed injection event kind 10 retains prior event kinds.
+- Outcome digest v4 for load scripts, canonical load script golden, timing/accounting/contention
+  tests and successful/loss examples. No-route job attribution, catalog-v2 telemetry and Gate 9 remain open.
+
 - Cluster 9 scripted port/switch/GPU failures and link-capacity degradation, strong typed targets,
   cross-resource recovery/attribution, scheduler health ownership and conflicting-control rejection.
 - Start-time serialization snapshots, asymmetric rate restoration, preflight minimum-rate timing,
@@ -23,7 +29,7 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 - A runnable 512-GPU spine-link failure/restoration scenario, later-job rerouting, analytical loss
   and propagation tests, strict unsupported-feature rejection, and legacy-output compatibility.
 - Explicit rejection of scripted CLI telemetry JSON/JSONL export until catalog-v2 failure support;
-  background loads, no-route attribution, complete failure telemetry and Gate 9 remain pending.
+  no-route attribution, complete failure telemetry and Gate 9 remain pending.
 
 - Accepted Cluster 8's deterministic telemetry architecture: per-run collection modes, typed
   correlation, versioned metrics, non-perturbing samples, bounded retention, and canonical JSON

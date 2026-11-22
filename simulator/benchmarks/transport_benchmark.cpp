@@ -158,6 +158,10 @@ class Dispatcher final {
                     nexuslab::sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected capacity-change event"};
     }
+    void operator()(const nexuslab::traffic::InjectionEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected background injection-change event"};
+    }
     void operator()(const nexuslab::collective::LocalCompletionEvent& /*event*/,
                     nexuslab::sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected collective event in this dispatcher"};

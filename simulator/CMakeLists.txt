@@ -4,6 +4,7 @@
 add_library(
     nexuslab_core STATIC
     src/failures/runtime.cpp
+    src/traffic/runtime.cpp
     src/sim/deterministic_rng.cpp
     src/sim/event_id.cpp
     src/sim/event_queue.cpp
@@ -69,6 +70,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     add_executable(
         nexuslab_tests
         tests/failure_test.cpp
+        tests/traffic_test.cpp
         tests/event_queue_test.cpp
         tests/foundation_test.cpp
         tests/link_queue_test.cpp
@@ -116,6 +118,8 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     include(GoogleTest)
     gtest_discover_tests(nexuslab_tests)
 
+    add_test(NAME nexuslab_cli_background_loads COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/background-loads.yaml" --timeline)
+    set_tests_properties(nexuslab_cli_background_loads PROPERTIES PASS_REGULAR_EXPRESSION "load_source=2 kind=checkpoint")
     add_test(NAME nexuslab_cli_scheduled_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/scheduled.yaml" --timeline)
     set_tests_properties(nexuslab_cli_scheduled_training PROPERTIES PASS_REGULAR_EXPRESSION "placement job=")
     add_test(NAME nexuslab_cli_training COMMAND nexuslab train --file "${PROJECT_SOURCE_DIR}/examples/training/two-worker.yaml" --timeline)

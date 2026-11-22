@@ -32,6 +32,8 @@ class Router final {
            telemetry::TelemetrySink telemetry = {});
     [[nodiscard]] std::optional<transport::SubmittedTransfer>
     submit(const RouteRequest& request, sim::SimulationContext& context);
+    // Read-only bootstrap check; no decision, IDs, cache state or RNG draws are consumed.
+    void preflight(const RouteRequest& request, sim::SimTimeNs latest) const;
     [[nodiscard]] std::span<const RouteDecision> decisions() const noexcept;
     [[nodiscard]] std::vector<RouteDecision> take_decisions();
     [[nodiscard]] CacheStatistics cache_statistics() const noexcept;

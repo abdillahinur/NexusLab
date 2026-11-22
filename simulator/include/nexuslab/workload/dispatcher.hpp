@@ -4,6 +4,7 @@
 #include "nexuslab/collective/runtime.hpp"
 #include "nexuslab/failures/runtime.hpp"
 #include "nexuslab/sim/simulation.hpp"
+#include "nexuslab/traffic/runtime.hpp"
 #include "nexuslab/workload/engine.hpp"
 #include <stdexcept>
 namespace nexuslab::workload {
@@ -12,8 +13,9 @@ class TrainingDispatcher final {
   public:
     TrainingDispatcher(WorkloadEngine& jobs, collective::RingExecutor& collectives,
                        transport::TransportRuntime& transport,
-                       failures::Runtime* failures = nullptr)
-        : jobs_{jobs}, collectives_{collectives}, transport_{transport}, failures_{failures} {}
+                       failures::Runtime* failures = nullptr, traffic::Runtime* loads = nullptr)
+        : jobs_{jobs}, collectives_{collectives}, transport_{transport}, failures_{failures},
+          loads_{loads} {}
     void operator()(const sim::NoOpEvent& /*event*/, sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected no-op in training simulation"};
     }
@@ -70,10 +72,22 @@ class TrainingDispatcher final {
         pump(c);
     }
 
+    void operator()(const traffic::InjectionEvent& event, sim::SimulationContext& context) {
+        if (loads_ == nullptr) {
+            throw std::logic_error{"unexpected background injection"};
+        }
+        loads_->handle(event, context);
+        pump(context);
+    }
+
   private:
     void pump(sim::SimulationContext& context) {
         for (const auto& completion : transport_.take_completed_transfers()) {
-            collectives_.handle(completion, context);
+            if (loads_ != nullptr && loads_->owns(completion.transfer)) {
+                loads_->handle(completion);
+            } else {
+                collectives_.handle(completion, context);
+            }
         }
         for (;;) {
             jobs_.dispatch_waiting(context);
@@ -90,5 +104,6 @@ class TrainingDispatcher final {
     collective::RingExecutor& collectives_;
     transport::TransportRuntime& transport_;
     failures::Runtime* failures_;
+    traffic::Runtime* loads_;
 };
 } // namespace nexuslab::workload

@@ -1,0 +1,38 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+version: 1
+gpus: 64
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+buffer_bytes: 100000
+jobs:
+  - name: training-with-background-traffic
+    workers: [0, 8]
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000
+failure_script:
+  version: 1
+  detection: immediate
+  incidents: []
+  loads:
+    - kind: burst
+      source_gpu: 0
+      destination_gpu: 8
+      at_ns: 1000
+      count: 2
+      interval_ns: 0
+      bytes_per_transfer: 8000
+      chunk_bytes: 1000
+    - kind: checkpoint
+      source_gpu: 16
+      destination_gpu: 24
+      at_ns: 500
+      count: 2
+      interval_ns: 10000
+      bytes_per_transfer: 2000
+      chunk_bytes: 1000
