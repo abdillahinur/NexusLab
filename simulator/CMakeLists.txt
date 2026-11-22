@@ -3,6 +3,7 @@
 
 add_library(
     nexuslab_core STATIC
+    src/failures/runtime.cpp
     src/sim/deterministic_rng.cpp
     src/sim/event_id.cpp
     src/sim/event_queue.cpp
@@ -67,6 +68,7 @@ nexuslab_enable_clang_tidy(nexuslab)
 if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
     add_executable(
         nexuslab_tests
+        tests/failure_test.cpp
         tests/event_queue_test.cpp
         tests/foundation_test.cpp
         tests/link_queue_test.cpp

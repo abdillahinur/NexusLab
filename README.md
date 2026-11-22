@@ -16,7 +16,8 @@ policy affect the modeled outcome?
 
 > [!IMPORTANT]
 > Clusters 0–8 are implemented and architecture-gate approved. Cluster 9 failure injection and
-> recovery is next. NexusBench-v0, durable result packaging/replay, advanced parallelism,
+> recovery is in progress: its first scripted link down/up slice is implemented; Gate 9 is pending.
+> NexusBench-v0, durable result packaging/replay, advanced parallelism,
 > multi-rail modeling, trace-driven replay, the reference study, and shadow/advisory mode are
 > planned work—not completed capabilities or published results.
 
@@ -67,8 +68,10 @@ The gate-approved foundation currently provides:
 Cluster 8's design is documented in
 [ADR-011](docs/adr/ADR-011-telemetry-observability-boundary.md), its complete public dictionary in
 [the telemetry design](docs/design/telemetry.md), and its evidence in
-[Architecture Gate 8](docs/architecture-gates/cluster-8.md). Failure detection/recovery behavior and
-the observable spine-link failure scenario remain Cluster 9 work.
+[Architecture Gate 8](docs/architecture-gates/cluster-8.md). The [spine-link scenario](examples/training/spine-link-failure.yaml) now exercises immediate
+detection, transport drops, alternative routing for later admissions and restoration. Broader failure
+models and complete failure telemetry remain Cluster 9 work; see the
+[implementation status](docs/design/failure-injection.md).
 
 ## Explicit boundaries
 

@@ -30,6 +30,7 @@ class RingExecutor final : public CollectiveExecutor {
     [[nodiscard]] CollectiveId submit(const CollectiveRequest& request,
                                       sim::SimulationContext& context) override;
     void cancel(CollectiveId id) override;
+    [[nodiscard]] std::optional<CollectiveId> owner(transport::TransferId transfer) const;
     void handle(const LocalCompletionEvent& event, sim::SimulationContext& context);
     void handle(const transport::TransferCompletion& completion, sim::SimulationContext& context);
     [[nodiscard]] std::vector<CollectiveResult> take_completed() override;

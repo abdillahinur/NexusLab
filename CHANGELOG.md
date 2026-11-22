@@ -11,6 +11,13 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Accepted ADR-019 and the first Cluster 9 scripted link down/up slice: bounded preflight/calendar,
+  immediate detection, domain lifecycle/drop/job attribution and canonical script/digest versions.
+- A runnable 512-GPU spine-link failure/restoration scenario, later-job rerouting, analytical loss
+  and propagation tests, strict unsupported-feature rejection, and legacy-output compatibility.
+- Explicit rejection of scripted CLI telemetry JSON/JSONL export until catalog-v2 failure support;
+  broader resource/capacity/load models and Gate 9 remain pending.
+
 - Accepted Cluster 8's deterministic telemetry architecture: per-run collection modes, typed
   correlation, versioned metrics, non-perturbing samples, bounded retention, and canonical JSON
   boundaries with Protobuf still deferred to Cluster 12.

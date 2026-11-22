@@ -22,6 +22,7 @@ class WorkloadEngine final {
                    std::unique_ptr<scheduling::SchedulingPolicy> policy = nullptr,
                    telemetry::TelemetrySink telemetry = {});
     void dispatch_waiting(sim::SimulationContext& context);
+    [[nodiscard]] std::optional<JobId> owner(collective::CollectiveId collective) const;
     [[nodiscard]] sim::EventId schedule_gpu_state(topology::GpuId gpu, bool healthy,
                                                   sim::SimTimeNs when,
                                                   sim::Simulation& simulation) const;

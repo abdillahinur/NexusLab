@@ -7,6 +7,11 @@
 #include <stdexcept>
 #include <utility>
 namespace nexuslab::workload {
+std::optional<JobId> WorkloadEngine::owner(collective::CollectiveId collective) const {
+    const auto found = collectives_.find(collective);
+    return found == collectives_.end() ? std::nullopt : std::optional{found->second};
+}
+
 WorkloadEngine::WorkloadEngine(const topology::TopologyGraph& graph,
                                collective::CollectiveExecutor& executor, WorkloadLimits limits,
                                std::optional<scheduling::Configuration> scheduling,

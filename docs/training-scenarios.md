@@ -42,6 +42,7 @@ scalars are unsigned and at most 20 characters. There are at most 10,000 jobs an
 | `telemetry` | Optional strict telemetry mapping; absence defaults to summary mode |
 | `jobs` | Required nonempty sequence of job mappings |
 | `controls` | Optional job cancellation/worker-failure event sequence |
+| `failure_script` | Optional version-1 immediate-detection link_down script; other kinds and nonempty loads currently rejected |
 
 Topology uses eight GPUs per NIC and eight NICs per rack with eight spines. Thus GPU 0 and GPU 1
 share a NIC; GPU 0 and GPU 8 communicate through the fabric. These are explicit synthetic local
@@ -201,3 +202,38 @@ remain Cluster 12 work.
 Local transfers share neither a serialized local bus nor a contention model. Each uses its configured
 bandwidth/latency independently. Ring rounds use global barriers; pipelined channels, reduction
 arithmetic, topology-aware rank ordering and actual NCCL behavior are outside this model.
+
+## Scripted link failure and restoration
+
+```bash
+bash scripts/build.sh release
+build/release/simulator/nexuslab train --file examples/training/spine-link-failure.yaml --timeline
+```
+
+Use the executable under NEXUSLAB_BUILD_ROOT when set. This synthetic 512-GPU Clos scenario
+fails physical leaf–spine link 576 at 2,500 ns and restores it at 30,000 ns. Detection is immediate.
+The first job fails and does not restart; an independent job during the outage selects a surviving
+path, and a later one can select the restored path. Exit status 1 is expected because the first job
+failed. The timeline and incident summary retain this negative outcome.
+
+The optional failure_script mapping requires version: 1, detection: immediate and an incidents
+sequence (up to 10,000 entries). Each entry requires kind: link_down, target (physical fabric
+LinkId) and at_ns; recover_at_ns is optional and must be later. IDs are declaration ordinals,
+starting at 1. Same-target episodes cannot overlap; adjacent episodes recover before the next onset.
+Missing restoration leaves the link down. loads may be omitted or an empty sequence; background
+loads and other incident kinds are explicitly unsupported in this slice. Targets, existing health
+and overlap are validated against the generated graph before event registration. The topology
+structure must remain fixed throughout the run.
+
+Active and queued chunks are dropped once; propagating chunks continue and check their next arc.
+Recovery admits new work without retrying failed chunks, collectives or jobs. Incident snapshots,
+unique drop attribution and affected-job counts remain available even with telemetry off.
+Human output adds a fixed-width hexadecimal failure_script_digest and digest version 2; callers
+use resolved_domain_outcome_digest_version(report) with domain_outcome_digest(report). Without a
+script, legacy output and digest version 1 are preserved.
+
+Scripted --telemetry-summary-json and --telemetry-records-jsonl output is rejected until catalog
+version 2 can represent the complete failure evidence. Existing telemetry modes still observe the
+previous domain metrics, but do not yet export incident lifecycle state. Use --timeline for this
+slice. See [ADR-019](adr/ADR-019-deterministic-failure-lifecycle.md) and
+[the remaining acceptance plan](design/failure-injection.md).

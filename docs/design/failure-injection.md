@@ -5,11 +5,36 @@ SPDX-License-Identifier: Apache-2.0
 
 # Cluster 9 implementation and acceptance plan
 
-Status: design only — 2026-11-22. [ADR-019](../adr/ADR-019-deterministic-failure-lifecycle.md) is
-proposed. Cluster 9 is not implemented or gate-approved. Clusters 0–8 remain approved; the full
+Status: first link down/up slice implemented — 2026-11-22.
+[ADR-019](../adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. Cluster 9 is in progress,
+not complete or gate-approved. Clusters 0–8 remain approved; the full
 scientific plan has 25 clusters, so 9/25 (36%) is a cluster-count proxy, not an effort estimate.
-Cross-cutting work already exists without separate cluster gates. Design completion does not
-increase this percentage.
+Cross-cutting work already exists without separate cluster gates. This implementation slice does not increase the gate-approved completion percentage.
+
+## Implemented vertical slice
+
+- Strict optional link_down scripts, bounded graph/overlap validation before event registration,
+  stable one-based IDs, recovery-before-onset ordering, and a canonical script digest golden.
+- Per-run coordinator reusing existing Critical link-state events, exactly-once domain lifecycle,
+  empty-service restoration, and pending state for stopped simulations.
+- A borrowed synchronous transport down-drop observer, disconnected by coordinator destruction.
+  It reports facts without choosing routes or forwarding outcomes. Read-only collective/job owner
+  lookups support bounded, unique chunk attribution and affected-job pairs independently of telemetry.
+- Legacy runs retain domain digest v1 and output; scripted reports resolve to digest v2 and include
+  incident snapshots, lifecycle and drop facts. Use resolved_domain_outcome_digest_version(report)
+  when consuming reports; the original constant describes legacy v1 only.
+- A checked-in 512-GPU spine-link demo, later admissions using surviving paths, restoration
+  eligibility, and analytical tests for same-time cancellation, propagation and fatal retention limits.
+
+The parser currently rejects degraded links, port/switch/GPU incidents and nonempty loads. No-route
+job attribution and catalog-v2 telemetry export remain future work. JSON/JSONL CLI export rejects
+scripted runs; the underlying catalog-v1 telemetry snapshot contains only existing domain metrics,
+not a complete failure report. No full-trace reconstruction claim is made for incident state yet.
+The future v2 digest layout must be explicitly versioned if subsequent slices extend its encoding.
+
+See [slice evidence](../benchmarks/cluster-9-link-failure-slice.md) and the runnable
+[spine-link scenario](../../examples/training/spine-link-failure.yaml). Full Cluster 9 scope and
+acceptance requirements below remain open. No new simulation event payload was needed.
 
 ## Existing boundaries to reuse
 
@@ -24,7 +49,7 @@ increase this percentage.
 | Scenario validation and digest | simulator/src/workload/scenario.cpp, digest.cpp | Validate script before scheduling; explicit digest versions |
 | Telemetry observations/catalog | simulator/include/nexuslab/telemetry/records.hpp; src/telemetry/metrics.cpp | Activate precise failure semantics and catalog version 2 |
 
-Proposed new simulator/include/nexuslab/failures and simulator/src/failures modules hold the
+The simulator/include/nexuslab/failures and simulator/src/failures modules hold the
 script model, validation, coordinator and snapshots. Exact class/file decomposition may be refined
 without moving domain ownership or changing the ADR contract. This plan adds no dependency.
 
@@ -96,7 +121,7 @@ is extended; no compare/matrix command is claimed today.
 
 Run bash scripts/validate-baseline.sh on the implementation revision: GCC Debug/Release, Clang,
 ASan/UBSan, formatting, clang-tidy and registered smoke tests. The 2026-11-22 baseline at
-75b45ef validates the development workflow; it does not validate this proposed contract.
+75b45ef validates the development workflow; it is historical workflow evidence, separate from the new slice results.
 
 Add a Release failure benchmark covering no-script versus scripted runs, repeated episodes,
 concurrent incidents and the 512-GPU anchor. Report exact revision/toolchain, event and retained

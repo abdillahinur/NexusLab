@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/collective/runtime.hpp"
+#include "nexuslab/failures/runtime.hpp"
 #include "nexuslab/scheduling/policy.hpp"
 #include "nexuslab/telemetry/metrics.hpp"
 #include "nexuslab/workload/model.hpp"
@@ -39,6 +40,7 @@ struct TrainingScenario final {
     std::optional<scheduling::Configuration> scheduling;
     std::vector<GpuControl> gpu_controls;
     telemetry::TelemetryConfiguration telemetry{};
+    std::optional<failures::Script> failure_script;
 };
 [[nodiscard]] std::vector<Profile> profiles();
 [[nodiscard]] TrainingScenario parse_scenario(std::string_view yaml);

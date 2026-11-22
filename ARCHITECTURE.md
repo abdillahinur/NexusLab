@@ -8,18 +8,23 @@ SPDX-License-Identifier: Apache-2.0
 ## Status
 
 This document describes the gate-approved implementation through Cluster 8 and the explicitly
-pending failure, NexusBench, research, and adoption boundaries. Pending Cluster 9, Cluster 24,
+pending NexusBench, research, and adoption boundaries. Cluster 9 is in progress. Cluster 24,
 Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-approved;
 subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
-## Cluster 9 proposed contract
+## Cluster 9 link-failure slice
 
-[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) records the proposed deterministic
-failure lifecycle, immediate detection, explicit loss/recovery, capacity changes, script identity
-and telemetry contract. [The implementation plan](docs/design/failure-injection.md) maps existing
-owners to bounded implementation slices and analytical acceptance tests. These are design
-documents; the approved implementation remains Clusters 0–8 and Gate 9 is pending.
+[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. The first slice adds
+strict link down/up scripts, a bounded per-run coordinator, canonical action order/script identity,
+domain lifecycle/drop attribution, and the 512-GPU spine-link demo. Transport and workload retain
+state/outcome ownership; a borrowed drop observer and read-only ownership lookups correlate lost
+chunks with incidents and jobs. Existing link-state events are reused, so event size is unchanged.
+
+The [implementation plan](docs/design/failure-injection.md) distinguishes this slice from pending
+capacity/resource extensions, loads, no-route attribution and catalog-v2 reconstruction/export.
+Scripted CLI JSON export is rejected until it can represent complete failure state. Clusters 0–8
+remain gate-approved; Cluster 9 is not complete and Gate 9 remains pending.
 
 ## System boundary
 

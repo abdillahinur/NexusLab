@@ -103,12 +103,27 @@ struct TransportLimits final {
     std::size_t maximum_route_hops{1'024};
 };
 
+struct DownDrop final {
+    ChunkId chunk;
+    TransferId transfer;
+    topology::DirectedLinkId link;
+    ByteCount bytes;
+    sim::SimTimeNs timestamp;
+    bool operator==(const DownDrop&) const = default;
+};
+class DownDropObserver {
+  public:
+    virtual ~DownDropObserver() = default;
+    virtual void on_down_drop(const DownDrop& drop) = 0;
+};
 class TransportRuntime final {
   public:
     TransportRuntime(topology::TopologyGraph& topology,
                      const std::vector<DirectedLinkConfiguration>& configurations,
                      TransportLimits limits = {}, telemetry::TelemetrySink telemetry = {});
 
+    // Observer is borrowed and must disconnect before destruction; only one owner may attach.
+    void set_down_drop_observer(DownDropObserver* observer);
     void register_chunk(RoutedChunk routed_chunk);
     [[nodiscard]] SubmittedTransfer submit_transfer(const TransferRequest& request,
                                                     sim::SimulationContext& context);
@@ -189,6 +204,7 @@ class TransportRuntime final {
 
     topology::TopologyGraph* topology_;
     TransportLimits limits_;
+    DownDropObserver* down_drop_observer_{nullptr};
     telemetry::TelemetrySink telemetry_;
     std::size_t route_entries_{0};
     std::map<TransferId, TransferRecord> transfers_;

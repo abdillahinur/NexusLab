@@ -138,6 +138,11 @@ struct CommandStreams final {
 
     const auto yaml = read_training_file(arguments[2]);
     const auto scenario = workload::parse_scenario(yaml);
+    if (scenario.failure_script.has_value() && arguments.size() == 4U &&
+        arguments[3] != "--timeline") {
+        throw std::invalid_argument{
+            "failure-script telemetry JSON export awaits catalog version 2; use --timeline"};
+    }
     const auto report = workload::run_training(scenario);
     if (arguments.size() == 4U && arguments[3] == "--telemetry-summary-json") {
         streams.output << telemetry::serialize_summary_json(

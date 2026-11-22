@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+# Synthetic 512-GPU Clos. Link 576 joins rack 0's leaf to spine 0.
+# Expected exit: 1, because the first job fails; subsequent jobs succeed.
+version: 1
+gpus: 512
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+buffer_bytes: 262144
+failure_script:
+  version: 1
+  detection: immediate
+  incidents:
+    - kind: link_down
+      target: 576
+      at_ns: 2500
+      recover_at_ns: 30000
+  loads: []
+jobs:
+  - name: interrupted
+    workers: [0, 64]
+    arrival_ns: 0
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000
+  - name: during-outage
+    workers: [8, 72]
+    arrival_ns: 5000
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000
+  - name: after-restoration
+    workers: [16, 80]
+    arrival_ns: 40000
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000

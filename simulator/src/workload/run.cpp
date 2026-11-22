@@ -4,6 +4,7 @@
 #include "nexuslab/topology/clos.hpp"
 #include "nexuslab/workload/dispatcher.hpp"
 #include <algorithm>
+#include <iomanip>
 #include <ostream>
 #include <stdexcept>
 namespace nexuslab::workload {
@@ -47,11 +48,19 @@ TrainingReport run_training(const TrainingScenario& scenario) {
                            telemetry_sink};
     collective::RingExecutor collectives{*graph, router, scenario.local, telemetry_sink};
     WorkloadEngine jobs{*graph, collectives, {}, scenario.scheduling, nullptr, telemetry_sink};
-    TrainingDispatcher dispatcher{jobs, collectives, transport};
+    std::unique_ptr<failures::Runtime> failures;
+    if (scenario.failure_script.has_value()) {
+        failures = std::make_unique<failures::Runtime>(*scenario.failure_script, *graph, transport,
+                                                       &collectives, &jobs);
+    }
+    TrainingDispatcher dispatcher{jobs, collectives, transport, failures.get()};
     const sim::TraceMode trace_mode = scenario.telemetry.mode == telemetry::TelemetryMode::Full
                                           ? sim::TraceMode::Enabled
                                           : sim::TraceMode::Disabled;
     sim::Simulation simulation{scenario.seed, trace_mode, telemetry_sink};
+    if (failures) {
+        failures->schedule(simulation);
+    }
     for (const auto& spec : scenario.jobs) {
         static_cast<void>(jobs.schedule(spec, simulation));
     }
@@ -97,6 +106,9 @@ TrainingReport run_training(const TrainingScenario& scenario) {
             report.maximum_waiting_bytes,
             transport.find_service(link.link)->queue().snapshot().maximum_waiting_bytes.value());
     }
+    if (failures) {
+        report.failures = failures->report();
+    }
     return report;
 }
 std::string_view state_name(JobState state) {
@@ -133,7 +145,29 @@ void write_report(const TrainingReport& report, std::ostream& output, bool inclu
                << " compute_gpu_ns=" << job.compute_gpu_ns << " idle_gpu_ns=" << job.idle_gpu_ns
                << " waiting_ns=" << job.waiting_ns << " reason=" << job.reason << '\n';
     }
+    if (report.failures.has_value()) {
+        output << "failure_script_digest=" << std::hex << std::setfill('0') << std::setw(16)
+               << report.failures->script_digest << std::dec << std::setfill(' ') << '\n';
+        output << "domain_outcome_digest_version=2\n";
+        for (const auto& incident : report.failures->incidents) {
+            output << "failure=" << incident.id.value()
+                   << " link=" << incident.specification.target.value()
+                   << " applied=" << incident.applied << " recovered=" << incident.recovered
+                   << " effective_operational=" << incident.effective_operational
+                   << " dropped_bytes=" << incident.dropped.bytes
+                   << " dropped_chunks=" << incident.dropped.chunks
+                   << " affected_jobs=" << incident.affected_jobs.size() << '\n';
+        }
+    }
     if (include_timeline) {
+        if (report.failures.has_value()) {
+            for (const auto& entry : report.failures->timeline) {
+                output << "failure_event id=" << entry.incident.value()
+                       << " transition=" << failures::transition_name(entry.kind)
+                       << " time_ns=" << entry.timestamp.count()
+                       << " effective_operational=" << entry.effective_operational << '\n';
+            }
+        }
         for (const auto& entry : report.placements) {
             output << "placement job=" << entry.job.value()
                    << " time_ns=" << entry.timestamp.count() << " policy=" << entry.policy

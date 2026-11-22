@@ -120,6 +120,35 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     telemetry::validate_configuration(result);
     return result;
 }
+[[nodiscard]] failures::Script read_failures(const YAML::Node& node) {
+    keys(node, {"version", "detection", "incidents", "loads"});
+    if (number(node["version"]) != 1 || !node["detection"].IsScalar() ||
+        node["detection"].Scalar() != "immediate") {
+        throw std::invalid_argument{"failure script requires version 1 and immediate detection"};
+    }
+    const auto loads = node["loads"];
+    if (loads && (!loads.IsSequence() || loads.size() != 0)) {
+        throw std::invalid_argument{"background failure-script loads are not implemented"};
+    }
+    const auto incidents = node["incidents"];
+    if (!incidents.IsSequence() || incidents.size() > 10'000) {
+        throw std::invalid_argument{"failure incidents require a bounded sequence"};
+    }
+    failures::Script result;
+    for (const auto& incident : incidents) {
+        keys(incident, {"kind", "target", "at_ns", "recover_at_ns"});
+        if (!incident["kind"].IsScalar() || incident["kind"].Scalar() != "link_down") {
+            throw std::invalid_argument{"only link_down failure incidents are implemented"};
+        }
+        result.incidents.push_back(
+            {topology::LinkId{number(incident["target"])},
+             sim::SimTimeNs{number(incident["at_ns"])},
+             incident["recover_at_ns"]
+                 ? std::optional{sim::SimTimeNs{number(incident["recover_at_ns"])}}
+                 : std::nullopt});
+    }
+    return result;
+}
 void read_compute(const YAML::Node& node, sim::SimDurationNs default_compute, JobSpec& result) {
     const auto workers = node["workers"];
     const auto requested = result.requested_workers;
@@ -236,7 +265,7 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     const auto root = YAML::Load(std::string{yaml});
     keys(root, {"version", "gpus", "seed", "routing_policy", "bandwidth_bps", "propagation_ns",
                 "buffer_bytes", "scheduling_policy", "gpu_controls", "local_bandwidth_bps",
-                "local_latency_ns", "telemetry", "jobs", "controls"});
+                "local_latency_ns", "telemetry", "jobs", "controls", "failure_script"});
     if (number(root["version"]) != 1) {
         throw std::invalid_argument{"unsupported training scenario version"};
     }
@@ -281,6 +310,9 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     result.gpu_controls =
         read_gpu_controls(root["gpu_controls"], result.gpus, result.scheduling.has_value());
     result.telemetry = read_telemetry(root["telemetry"]);
+    if (root["failure_script"]) {
+        result.failure_script = read_failures(root["failure_script"]);
+    }
     return result;
 }
 } // namespace nexuslab::workload

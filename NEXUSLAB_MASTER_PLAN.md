@@ -2092,10 +2092,11 @@ Model predictable failures and measure policy response.
 
 ## Design status — 2026-11-22
 
-[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) proposes the failure contract;
+[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) accepts the failure contract;
 [the execution plan](docs/design/failure-injection.md) defines slices and acceptance evidence.
-Design is recorded; implementation and Gate 9 remain pending. Accept the ADR before runtime
-changes. This does not narrow the MVP failures listed below.
+The first deterministic link down/up slice is implemented, including the 512-GPU spine-link demo
+and bounded drop/job attribution. Other resource kinds, capacity degradation, loads, no-route
+attribution, catalog-v2 export and Gate 9 remain pending. This does not narrow the MVP failures below.
 
 ## Dependencies
 
@@ -3828,6 +3829,8 @@ Accepted:
 - ADR-009: Define Ring AllReduce planning and execution.
 - ADR-010: Define bounded admission scheduling and GPU placement.
 - ADR-011: Define the deterministic telemetry and observability boundary.
+- [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md): deterministic failure scripts,
+  detection, recovery, capacity changes and attribution (Cluster 9; first link-only slice implemented).
 
 Reserved; each document remains proposed and must be written and accepted before implementation of
 its owning cluster:
@@ -3845,11 +3848,6 @@ its owning cluster:
   and non-applied decision audit schema (Cluster 16).
 - ADR-018: Calibration/validity definitions for held-out policy-ranking correlation, disagreement
   reporting, and private-trace disclosure boundaries (Cluster 14; later Stage 3 work).
-
-Proposed:
-
-- [ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md): deterministic failure scripts,
-  detection, recovery, capacity changes and attribution (Cluster 9); not yet accepted or implemented.
 
 Other planned topics receive an ADR number when work on the owning cluster begins:
 
@@ -5098,7 +5096,7 @@ simulation, networking, distributed systems, observability, benchmarking, and fa
 | 6 | Collective Communication Engine | Complete | Yes |
 | 7 | Scheduler and GPU Placement | Complete | Yes |
 | 8 | Telemetry and Observability | Complete | Yes |
-| 9 | Failure Injection and Recovery | Not Started | No |
+| 9 | Failure Injection and Recovery | In Progress — link down/up slice implemented | No |
 | 10 | Congestion-Control Framework | Not Started | No |
 | 11 | Experiment Orchestrator | Not Started | No |
 | 12 | Result Store and Replay Format | Not Started | No |

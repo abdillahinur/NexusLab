@@ -179,6 +179,45 @@ std::uint64_t domain_outcome_digest(const TrainingReport& report) noexcept {
     add_range(digest, report.decisions, add_route);
     add_range(digest, report.placements, add_placement);
     digest.add(report.maximum_waiting_bytes);
+    if (report.failures.has_value()) {
+        digest.add(std::string_view{"nexuslab.domain-outcome"});
+        digest.add(2);
+        digest.add(report.failures->script_digest);
+        digest.add(report.failures->incidents.size());
+        for (const auto& incident : report.failures->incidents) {
+            digest.add(incident.id.value());
+            digest.add_bool(incident.applied);
+            digest.add_bool(incident.recovered);
+            digest.add_bool(incident.effective_operational);
+            digest.add(incident.dropped.bytes);
+            digest.add(incident.dropped.chunks);
+            digest.add(incident.affected_jobs.size());
+            for (const auto job : incident.affected_jobs) {
+                digest.add(job.value());
+            }
+        }
+        digest.add(report.failures->timeline.size());
+        for (const auto& entry : report.failures->timeline) {
+            digest.add(entry.incident.value());
+            digest.add_enum(entry.kind);
+            digest.add(entry.timestamp.count());
+            digest.add_bool(entry.effective_operational);
+        }
+        digest.add(report.failures->drops.size());
+        for (const auto& drop : report.failures->drops) {
+            digest.add(drop.incident.value());
+            digest.add(drop.observation.chunk.value());
+            digest.add(drop.observation.transfer.value());
+            digest.add(drop.observation.link.link.value());
+            digest.add_enum(drop.observation.link.direction);
+            digest.add(drop.observation.bytes.value());
+            digest.add(drop.observation.timestamp.count());
+            digest.add_bool(drop.job.has_value());
+            if (drop.job.has_value()) {
+                digest.add(drop.job->value());
+            }
+        }
+    }
     return digest.value();
 }
 

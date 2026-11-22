@@ -7,6 +7,11 @@
 #include <stdexcept>
 #include <utility>
 namespace nexuslab::collective {
+std::optional<CollectiveId> RingExecutor::owner(transport::TransferId transfer) const {
+    const auto found = transfers_.find(transfer);
+    return found == transfers_.end() ? std::nullopt : std::optional{found->second.collective};
+}
+
 RingExecutor::RingExecutor(const topology::TopologyGraph& graph, routing::Router& router,
                            CollectiveConfiguration configuration,
                            telemetry::TelemetrySink telemetry)

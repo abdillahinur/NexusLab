@@ -16,6 +16,7 @@ struct TrainingReport final {
     std::uint64_t maximum_waiting_bytes{0};
     std::vector<scheduling::PlacementDecision> placements;
     telemetry::TelemetrySnapshot telemetry;
+    std::optional<failures::Report> failures{std::nullopt};
 };
 [[nodiscard]] TrainingReport run_training(const TrainingScenario& scenario);
 void write_report(const TrainingReport& report, std::ostream& output, bool include_timeline);

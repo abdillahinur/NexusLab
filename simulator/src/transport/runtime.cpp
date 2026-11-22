@@ -13,6 +13,13 @@
 #include <utility>
 
 namespace nexuslab::transport {
+void TransportRuntime::set_down_drop_observer(DownDropObserver* observer) {
+    if (observer != nullptr && down_drop_observer_ != nullptr) {
+        throw std::logic_error{"transport down-drop observer already attached"};
+    }
+    down_drop_observer_ = observer;
+}
+
 TransportRuntime::TransportRuntime(topology::TopologyGraph& topology,
                                    const std::vector<DirectedLinkConfiguration>& configurations,
                                    TransportLimits limits, telemetry::TelemetrySink telemetry)
@@ -195,6 +202,10 @@ void TransportRuntime::handle_arrival(const ChunkArrivalEvent& event,
         const LinkStatistics after = service.statistics(context.now());
         record.scheduled_arrival.reset();
         record.state = ChunkTransitState::DroppedLinkDown;
+        if (down_drop_observer_ != nullptr) {
+            down_drop_observer_->on_down_drop(
+                {record.chunk.id, record.chunk.transfer, link, record.chunk.bytes, context.now()});
+        }
         emit_queue(record, link, telemetry::QueueTransition::Dropped, context);
         emit_transfer(record, telemetry::TransferTransition::ChunkDropped, context, link,
                       telemetry::TransferReason::ResourceDown);
@@ -422,6 +433,10 @@ void TransportRuntime::mark_dropped_link_down(const QueueDrain& drained,
         }
         record.chunk = chunk;
         record.state = ChunkTransitState::DroppedLinkDown;
+        if (down_drop_observer_ != nullptr) {
+            down_drop_observer_->on_down_drop(
+                {record.chunk.id, record.chunk.transfer, link, record.chunk.bytes, context.now()});
+        }
         emit_queue(record, link, telemetry::QueueTransition::Dropped, context);
         emit_transfer(record, telemetry::TransferTransition::ChunkDropped, context, link,
                       telemetry::TransferReason::ResourceDown);

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #pragma once
 #include "nexuslab/collective/runtime.hpp"
+#include "nexuslab/failures/runtime.hpp"
 #include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/workload/engine.hpp"
 #include <stdexcept>
@@ -10,8 +11,9 @@ namespace nexuslab::workload {
 class TrainingDispatcher final {
   public:
     TrainingDispatcher(WorkloadEngine& jobs, collective::RingExecutor& collectives,
-                       transport::TransportRuntime& transport)
-        : jobs_{jobs}, collectives_{collectives}, transport_{transport} {}
+                       transport::TransportRuntime& transport,
+                       failures::Runtime* failures = nullptr)
+        : jobs_{jobs}, collectives_{collectives}, transport_{transport}, failures_{failures} {}
     void operator()(const sim::NoOpEvent& /*event*/, sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected no-op in training simulation"};
     }
@@ -32,7 +34,11 @@ class TrainingDispatcher final {
         pump(c);
     }
     void operator()(const transport::LinkStateChangeEvent& e, sim::SimulationContext& c) {
-        transport_.handle_link_state_change(e, c);
+        if (failures_ != nullptr) {
+            failures_->handle(e, c);
+        } else {
+            transport_.handle_link_state_change(e, c);
+        }
         pump(c);
     }
     void operator()(const transport::PortStateChangeEvent& e, sim::SimulationContext& c) {
@@ -63,5 +69,6 @@ class TrainingDispatcher final {
     WorkloadEngine& jobs_;
     collective::RingExecutor& collectives_;
     transport::TransportRuntime& transport_;
+    failures::Runtime* failures_;
 };
 } // namespace nexuslab::workload

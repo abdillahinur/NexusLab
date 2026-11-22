@@ -7,10 +7,13 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Status
 
-Proposed — 2026-11-22. This is the Cluster 9 implementation contract, not an accepted architecture
-decision, implemented capability, or Gate 9 approval. ADR-012 through ADR-018 retain their reserved
+Accepted — 2026-11-22 after contract review. This authorizes incremental Cluster 9 implementation;
+it does not record complete implementation or Gate 9 approval. ADR-012 through ADR-018 retain their reserved
 numbers. The [execution plan](../design/failure-injection.md) defines the implementation slices and
-acceptance evidence. The master plan's complete Cluster 9 scope remains required.
+acceptance evidence. The master plan's complete Cluster 9 scope remains required. The first link-only vertical slice
+is implemented; capacity/resource extensions, loads, no-route attribution, and catalog-v2
+serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
+explicitly; domain reports and human timelines are the supported failure evidence.
 
 ## Context
 
@@ -55,12 +58,12 @@ Checkpoint traffic models explicit bytes over endpoints, not storage, checkpoint
 training-state restoration or disk performance. Both load kinds use the same bounded injection
 mechanism and differ only in declared provenance and request schedule.
 
-### Proposed scenario contract
+### Scenario contract
 
 Existing training scenario version 1 gains an optional failure_script mapping. Its absence preserves
 existing scheduling, output and digest behavior. Unknown/duplicate keys, unsupported versions and
-invalid targets fail before event registration. The following is proposed syntax, not a runnable
-current example; target IDs must be resolved against the generated topology before acceptance:
+invalid targets fail before event registration. The full contract is implemented incrementally; unsupported kinds and loads must be rejected.
+The following illustrates the schema; target IDs must be resolved against the generated topology before acceptance:
 
 ```yaml
 failure_script:
@@ -115,6 +118,9 @@ Bootstrap registers the complete failure calendar before existing jobs, job cont
 controls. Calendar actions use Critical priority and are scheduled in the order
 (timestamp, action phase, FailureId), with recovery phase 0 and onset phase 1. Both lifecycle and
 reconciliation execute synchronously in that action's handler; detection is not a follow-up event.
+The link-only slice reuses LinkStateChangeEvent, with the coordinator validating its registered
+event ID, target, state and timestamp. It adds no event alternative or trace kind. Future action
+types add a payload only when existing typed events cannot express them.
 Existing equal-priority controls follow failure actions by event ID. Load requests use Normal
 priority and are registered after the existing workload events, in (timestamp, TrafficSourceId,
 request ordinal) order. No priority values or kernel comparator semantics change.
