@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+
+FROM ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash ca-certificates cmake ninja-build git g++ \
+    clang-18 clang-format-18 clang-tidy-18 \
+    && ln -s /usr/bin/clang-18 /usr/local/bin/clang \
+    && ln -s /usr/bin/clang++-18 /usr/local/bin/clang++ \
+    && ln -s /usr/bin/clang-format-18 /usr/local/bin/clang-format \
+    && ln -s /usr/bin/clang-tidy-18 /usr/local/bin/clang-tidy \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+ENV NEXUSLAB_BUILD_ROOT=/build
+CMD ["bash", "scripts/validate-baseline.sh"]

@@ -27,6 +27,10 @@ bash scripts/lint.sh
 
 Use `sanitize` instead of `dev` to run with AddressSanitizer and UndefinedBehaviorSanitizer.
 
+For the complete compiler/sanitizer/quality baseline, run `bash scripts/validate-baseline.sh`.
+The [baseline guide](docs/development-baseline.md) includes a Linux container workflow for macOS,
+log locations, and the latest recorded validation results.
+
 ## Code requirements
 
 - Preserve deterministic behavior.
