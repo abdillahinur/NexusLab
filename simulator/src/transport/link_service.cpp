@@ -8,6 +8,13 @@
 #include <stdexcept>
 
 namespace nexuslab::transport {
+void DirectedLinkService::set_bandwidth(BitsPerSecond bandwidth) {
+    queue_.set_bandwidth(bandwidth);
+}
+std::optional<BitsPerSecond> DirectedLinkService::active_bandwidth() const noexcept {
+    return active_bandwidth_;
+}
+
 namespace {
 [[nodiscard]] sim::SimTimeNs completion_time(const TransferChunk& chunk,
                                              const DirectedLinkConfiguration& config,
@@ -86,6 +93,7 @@ AdmissionResult DirectedLinkService::admit(TransferChunk chunk, sim::SimulationC
     if (idle) {
         scheduled_completion_ = completion;
         busy_since_ = now;
+        active_bandwidth_ = queue_.configuration().bandwidth;
     }
     return result;
 }
@@ -117,6 +125,8 @@ ServiceTransition DirectedLinkService::handle_completion(const TransmissionCompl
     statistics_ = next;
     scheduled_completion_ = completion;
     busy_since_ = completion.has_value() ? std::optional{context.now()} : std::nullopt;
+    active_bandwidth_ =
+        completion.has_value() ? std::optional{queue_.configuration().bandwidth} : std::nullopt;
     return *transition;
 }
 
@@ -141,6 +151,7 @@ QueueDrain DirectedLinkService::reconcile_down(sim::SimulationContext& context) 
     QueueDrain drained = queue_.drain();
     scheduled_completion_.reset();
     busy_since_.reset();
+    active_bandwidth_.reset();
     statistics_ = next;
     return drained;
 }

@@ -22,6 +22,7 @@ struct RouteDecision final {
     std::uint64_t score;
     std::string reason;
     std::optional<transport::TransferId> transfer;
+    std::uint64_t capacity_revision{0};
     bool operator==(const RouteDecision&) const = default;
 };
 class Router final {

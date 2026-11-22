@@ -29,6 +29,8 @@ class DirectedLinkService final {
     [[nodiscard]] QueueDrain reconcile_down(sim::SimulationContext& context);
     [[nodiscard]] LinkStatistics statistics(sim::SimTimeNs now) const;
     void record_link_down(const TransferChunk& chunk);
+    void set_bandwidth(BitsPerSecond bandwidth);
+    [[nodiscard]] std::optional<BitsPerSecond> active_bandwidth() const noexcept;
 
   private:
     [[nodiscard]] sim::EventId schedule_completion(const TransferChunk& chunk,
@@ -38,6 +40,7 @@ class DirectedLinkService final {
     std::optional<sim::EventId> scheduled_completion_;
     LinkStatistics statistics_;
     std::optional<sim::SimTimeNs> busy_since_;
+    std::optional<BitsPerSecond> active_bandwidth_;
 };
 
 } // namespace nexuslab::transport

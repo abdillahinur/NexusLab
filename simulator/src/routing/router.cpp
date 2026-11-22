@@ -35,7 +35,8 @@ std::optional<transport::SubmittedTransfer> Router::submit(const RouteRequest& r
                            {},
                            0,
                            "no operational fabric path",
-                           std::nullopt};
+                           std::nullopt,
+                           runtime_->capacity_revision()};
     if (candidates.empty()) {
         const telemetry::RoutingDecisionId id = next_decision_id();
         emit_decision(decision, telemetry::RoutingDecisionOutcome::NoRoute, id, context);

@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+# Expected exit: 1. The failed owner never resumes; the pinned waiter uses GPU 0 after recovery.
+version: 1
+gpus: 64
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+buffer_bytes: 262144
+scheduling_policy: first-fit
+failure_script:
+  version: 1
+  detection: immediate
+  incidents:
+    - kind: gpu_down
+      target: 0
+      at_ns: 2500
+      recover_at_ns: 10000
+jobs:
+  - name: affected
+    workers: [0, 8]
+    arrival_ns: 0
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000
+  - name: after-restoration
+    workers: [0, 16]
+    arrival_ns: 3000
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000

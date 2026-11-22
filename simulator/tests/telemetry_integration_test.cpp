@@ -176,6 +176,10 @@ class TransportDispatcher final {
                     sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected workload event"};
     }
+    void operator()(const nexuslab::transport::LinkCapacityChangeEvent& /*event*/,
+                    nexuslab::sim::SimulationContext& /*context*/) const {
+        throw std::logic_error{"unexpected capacity-change event"};
+    }
     void operator()(const collective::LocalCompletionEvent& /*event*/,
                     sim::SimulationContext& /*context*/) const {
         throw std::logic_error{"unexpected collective event"};

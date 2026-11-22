@@ -13,7 +13,8 @@ inline constexpr std::uint32_t domain_outcome_digest_version = 1;
 
 [[nodiscard]] inline std::uint32_t
 resolved_domain_outcome_digest_version(const TrainingReport& report) noexcept {
-    return report.failures.has_value() ? 2U : domain_outcome_digest_version;
+    return report.failures.has_value() ? report.failures->outcome_version
+                                       : domain_outcome_digest_version;
 }
 
 // Hashes authoritative domain results while deliberately excluding telemetry and the

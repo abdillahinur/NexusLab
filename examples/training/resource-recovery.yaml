@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 NexusLab contributors
+# SPDX-License-Identifier: Apache-2.0
+# Port 17 belongs to leaf switch 0 on physical fabric link 8.
+# Expected exit: 1. Port restoration alone cannot override the still-down switch.
+version: 1
+gpus: 64
+seed: 42
+routing_policy: shortest-path
+bandwidth_bps: 8000000000
+propagation_ns: 25
+buffer_bytes: 262144
+failure_script:
+  version: 1
+  detection: immediate
+  incidents:
+    - kind: port_down
+      target: 17
+      at_ns: 2500
+      recover_at_ns: 10000
+    - kind: switch_down
+      target: 0
+      at_ns: 3000
+      recover_at_ns: 12000
+jobs:
+  - name: affected
+    workers: [0, 8]
+    arrival_ns: 0
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000
+  - name: after-restoration
+    workers: [16, 24]
+    arrival_ns: 14000
+    steps: 1
+    compute_ns: 1000
+    gradient_bytes: 4000
+    bucket_bytes: 4000
+    chunk_bytes: 1000

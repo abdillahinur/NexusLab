@@ -120,6 +120,46 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     telemetry::validate_configuration(result);
     return result;
 }
+[[nodiscard]] failures::Kind read_failure_kind(std::string_view text) {
+    for (const auto kind :
+         {failures::Kind::LinkDown, failures::Kind::LinkDegraded, failures::Kind::PortDown,
+          failures::Kind::SwitchDown, failures::Kind::GpuDown}) {
+        if (failures::kind_name(kind) == text) {
+            return kind;
+        }
+    }
+    throw std::invalid_argument{"unknown failure kind"};
+}
+[[nodiscard]] failures::Target read_failure_target(failures::Kind kind, std::uint64_t id) {
+    switch (kind) {
+    case failures::Kind::PortDown:
+        return topology::PortId{id};
+    case failures::Kind::SwitchDown:
+        return topology::SwitchId{id};
+    case failures::Kind::GpuDown:
+        return topology::GpuId{id};
+    default:
+        return topology::LinkId{id};
+    }
+}
+[[nodiscard]] failures::Incident read_incident(const YAML::Node& incident) {
+    keys(incident, {"kind", "target", "at_ns", "recover_at_ns", "bandwidth_bps"});
+    const auto kind = read_failure_kind(incident["kind"].as<std::string>());
+    const auto target = read_failure_target(kind, number(incident["target"]));
+    const auto bandwidth =
+        incident["bandwidth_bps"]
+            ? std::optional{transport::BitsPerSecond{number(incident["bandwidth_bps"])}}
+            : std::nullopt;
+    if ((kind == failures::Kind::LinkDegraded) != bandwidth.has_value() ||
+        (bandwidth.has_value() && bandwidth->value() == 0)) {
+        throw std::invalid_argument{"only degraded links require positive bandwidth_bps"};
+    }
+    return {target, sim::SimTimeNs{number(incident["at_ns"])},
+            incident["recover_at_ns"]
+                ? std::optional{sim::SimTimeNs{number(incident["recover_at_ns"])}}
+                : std::nullopt,
+            kind, bandwidth};
+}
 [[nodiscard]] failures::Script read_failures(const YAML::Node& node) {
     keys(node, {"version", "detection", "incidents", "loads"});
     if (number(node["version"]) != 1 || !node["detection"].IsScalar() ||
@@ -136,16 +176,7 @@ void keys(const YAML::Node& node, std::initializer_list<std::string_view> allowe
     }
     failures::Script result;
     for (const auto& incident : incidents) {
-        keys(incident, {"kind", "target", "at_ns", "recover_at_ns"});
-        if (!incident["kind"].IsScalar() || incident["kind"].Scalar() != "link_down") {
-            throw std::invalid_argument{"only link_down failure incidents are implemented"};
-        }
-        result.incidents.push_back(
-            {topology::LinkId{number(incident["target"])},
-             sim::SimTimeNs{number(incident["at_ns"])},
-             incident["recover_at_ns"]
-                 ? std::optional{sim::SimTimeNs{number(incident["recover_at_ns"])}}
-                 : std::nullopt});
+        result.incidents.push_back(read_incident(incident));
     }
     return result;
 }
@@ -258,6 +289,28 @@ std::vector<GpuControl> read_gpu_controls(const YAML::Node& controls, std::size_
     return result;
 }
 } // namespace
+void validate_failure_controls(const TrainingScenario& scenario) {
+    if (!scenario.failure_script.has_value()) {
+        return;
+    }
+    for (const auto& incident : scenario.failure_script->incidents) {
+        if (incident.kind != failures::Kind::GpuDown) {
+            continue;
+        }
+        if (!scenario.scheduling.has_value()) {
+            throw std::invalid_argument{"GPU failure requires scheduling_policy"};
+        }
+        const auto* gpu = std::get_if<topology::GpuId>(&incident.target);
+        if (gpu == nullptr) {
+            throw std::invalid_argument{"GPU incident requires a GPU target"};
+        }
+        for (const auto& control : scenario.gpu_controls) {
+            if (control.gpu == *gpu) {
+                throw std::invalid_argument{"scripted GPU conflicts with gpu_controls"};
+            }
+        }
+    }
+}
 TrainingScenario parse_scenario(std::string_view yaml) {
     if (yaml.size() > 1'048'576) {
         throw std::length_error{"scenario exceeds one MiB"};
@@ -313,6 +366,7 @@ TrainingScenario parse_scenario(std::string_view yaml) {
     if (root["failure_script"]) {
         result.failure_script = read_failures(root["failure_script"]);
     }
+    validate_failure_controls(result);
     return result;
 }
 } // namespace nexuslab::workload

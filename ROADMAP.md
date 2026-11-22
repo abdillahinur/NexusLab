@@ -19,7 +19,7 @@ stages they unlock, not as an independent feature checklist.
 | Routing comparison | 4 | ECMP, least-loaded, and queue-aware routing | Complete; Cluster 4 gate approved |
 | Training workload MVP | 5–6 | Synthetic jobs and Ring AllReduce | Complete; Clusters 5 and 6 gates approved |
 | Multi-tenant cluster | 7 | First-fit scheduling and placement comparisons | Complete; Cluster 7 gate approved |
-| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Cluster 8 complete/gate approved; Cluster 9 link down/up slice implemented; gate pending |
+| Failures and telemetry | 8–9 | Observable spine-link failure and recovery | Cluster 8 complete/gate approved; Cluster 9 resource/capacity slices implemented; gate pending |
 | Experiment platform | 11–12 | Reproducible matrices, manifests, digests, results, and replay | Not started |
 | NexusBench-v0 specification and harness | 24 + minimum 14–15 | Frozen routing/placement tracks, two baselines each, three-repeat matrices, metrics, policy guide, and digests | Not started; ADR-012 and ADR-013 required |
 | Advanced parallelism | 20 | DP/TP/PP/EP models feeding the planned NB-Collective track | Not started; ADR-014 required |
@@ -37,8 +37,8 @@ and Cluster 15 static policy SDK are dependencies of Cluster 24; deeper attribut
 23, while ranking calibration remains later Stage 3 work.
 
 Cluster 9 has an [accepted failure contract](docs/adr/ADR-019-deterministic-failure-lifecycle.md)
-and [implementation/acceptance plan](docs/design/failure-injection.md). Its first link down/up
-slice is implemented; remaining resource/telemetry work and Gate 9 are pending. By cluster count, 9 of 25 clusters are gate-approved (36%); this is not an effort-weighted
+and [implementation/acceptance plan](docs/design/failure-injection.md). Its link/resource/capacity slices
+are implemented; background loads, complete telemetry and Gate 9 are pending. By cluster count, 9 of 25 clusters are gate-approved (36%); this is not an effort-weighted
 completion estimate.
 
 ## Scientific delivery order

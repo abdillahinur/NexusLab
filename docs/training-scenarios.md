@@ -42,7 +42,7 @@ scalars are unsigned and at most 20 characters. There are at most 10,000 jobs an
 | `telemetry` | Optional strict telemetry mapping; absence defaults to summary mode |
 | `jobs` | Required nonempty sequence of job mappings |
 | `controls` | Optional job cancellation/worker-failure event sequence |
-| `failure_script` | Optional version-1 immediate-detection link_down script; other kinds and nonempty loads currently rejected |
+| `failure_script` | Optional version-1 immediate-detection resource/capacity script; nonempty loads currently rejected |
 
 Topology uses eight GPUs per NIC and eight NICs per rack with eight spines. Thus GPU 0 and GPU 1
 share a NIC; GPU 0 and GPU 8 communicate through the fabric. These are explicit synthetic local
@@ -217,18 +217,19 @@ path, and a later one can select the restored path. Exit status 1 is expected be
 failed. The timeline and incident summary retain this negative outcome.
 
 The optional failure_script mapping requires version: 1, detection: immediate and an incidents
-sequence (up to 10,000 entries). Each entry requires kind: link_down, target (physical fabric
-LinkId) and at_ns; recover_at_ns is optional and must be later. IDs are declaration ordinals,
+sequence (up to 10,000 entries). Each entry requires kind, a resource target and at_ns; the kind
+determines the target ID type. recover_at_ns is optional and must be later. IDs are declaration ordinals,
 starting at 1. Same-target episodes cannot overlap; adjacent episodes recover before the next onset.
-Missing restoration leaves the link down. loads may be omitted or an empty sequence; background
-loads and other incident kinds are explicitly unsupported in this slice. Targets, existing health
+Missing restoration leaves the resource impaired. loads may be omitted or an empty sequence;
+background loads remain unsupported. Targets, existing health
 and overlap are validated against the generated graph before event registration. The topology
 structure must remain fixed throughout the run.
 
 Active and queued chunks are dropped once; propagating chunks continue and check their next arc.
 Recovery admits new work without retrying failed chunks, collectives or jobs. Incident snapshots,
 unique drop attribution and affected-job counts remain available even with telemetry off.
-Human output adds a fixed-width hexadecimal failure_script_digest and digest version 2; callers
+Human output adds a fixed-width hexadecimal failure_script_digest; link-only runs use outcome
+digest v2, and new resource/capacity kinds use v3. Callers
 use resolved_domain_outcome_digest_version(report) with domain_outcome_digest(report). Without a
 script, legacy output and digest version 1 are preserved.
 
@@ -237,3 +238,37 @@ version 2 can represent the complete failure evidence. Existing telemetry modes 
 previous domain metrics, but do not yet export incident lifecycle state. Use --timeline for this
 slice. See [ADR-019](adr/ADR-019-deterministic-failure-lifecycle.md) and
 [the remaining acceptance plan](design/failure-injection.md).
+
+## Resource recovery and degraded capacity
+
+| Kind | Target | Additional requirements |
+|---|---|---|
+| link_down | Physical fabric LinkId | Recovery restores link state only |
+| link_degraded | Physical fabric LinkId | Positive bandwidth_bps below both baseline direction rates |
+| port_down | Fabric PortId | Local attachment ports are unsupported |
+| switch_down | SwitchId | Reconciles affected fabric serializers |
+| gpu_down | GpuId | Requires scheduling_policy; same GPU cannot appear in gpu_controls |
+
+bandwidth_bps is required only for link_degraded and rejected on other kinds. Incidents on the same
+resource cannot overlap; link_down and link_degraded share one physical-link resource key. Different
+resource kinds remain independent even when numeric IDs match. Clearing a port/link does not
+override a still-down switch. Persistent GPU failure aborts its owner once, leaves that GPU unhealthy,
+and allows pinned jobs to wait until recovery. Issued communication drains; aborted jobs never resume.
+
+An active serialization retains its original completion time and active bandwidth. Queued chunks
+use effective bandwidth when they start. Recovery does not accelerate the chunk already active at
+that instant, and restores each direction's own baseline. Capacity changes increment
+capacity_revision but do not invalidate topology reachability. Queue-aware routing reads current
+capacity. Slow traffic is not counted as dropped bytes or retroactively called failure-affected jobs.
+
+```bash
+# Expected exit 1: first job fails; later independent job succeeds.
+build/release/simulator/nexuslab train --file examples/training/resource-recovery.yaml --timeline
+build/release/simulator/nexuslab train --file examples/training/gpu-recovery.yaml --timeline
+# Expected exit 0: reduced capacity delays traffic without dropping chunks.
+build/release/simulator/nexuslab train --file examples/training/link-degradation.yaml --timeline
+```
+
+Use the build executable under NEXUSLAB_BUILD_ROOT when set. The examples are synthetic and do not
+model hardware fault detection or checkpoint restoration. Capacity/incident state is available in
+domain reports; complete catalog-v2 telemetry and scripted JSON/JSONL export remain pending.

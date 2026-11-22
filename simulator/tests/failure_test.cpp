@@ -7,6 +7,7 @@
 #include "nexuslab/workload/digest.hpp"
 #include <array>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <gtest/gtest.h>
 #include <limits>
@@ -88,6 +89,15 @@ struct Dispatcher final {
         transport.handle_completion(e, c);
     }
     void operator()(const transport::LinkStateChangeEvent& e, sim::SimulationContext& c) {
+        failures.handle(e, c);
+    }
+    void operator()(const transport::PortStateChangeEvent& e, sim::SimulationContext& c) {
+        failures.handle(e, c);
+    }
+    void operator()(const transport::SwitchStateChangeEvent& e, sim::SimulationContext& c) {
+        failures.handle(e, c);
+    }
+    void operator()(const transport::LinkCapacityChangeEvent& e, sim::SimulationContext& c) {
         failures.handle(e, c);
     }
     template <class Event>
@@ -270,8 +280,9 @@ TEST(FailureTest, SpineFailureAbortsOldJobReroutesNewWorkAndRestoresEligibility)
     bool after_recovery_uses_target = false;
     for (const auto& decision : report.decisions) {
         const bool uses_target =
-            std::any_of(decision.path.begin(), decision.path.end(),
-                        [&](const auto& arc) { return arc.link == incident.specification.target; });
+            std::any_of(decision.path.begin(), decision.path.end(), [&](const auto& arc) {
+                return arc.link.value() == target_value(incident.specification.target);
+            });
         if (decision.timestamp >= sim::SimTimeNs{2500} &&
             decision.timestamp < sim::SimTimeNs{30000}) {
             falsity(uses_target);
@@ -373,7 +384,7 @@ TEST(FailureTest, StrictParsingRejectsFutureFeaturesAndDuplicateKeys) {
          "{version: 1, detection: delayed, incidents: []}",
          "{version: 1, detection: immediate, delay_ns: 1, incidents: []}",
          "{version: 1, version: 1, detection: immediate, incidents: []}",
-         "{version: 1, detection: immediate, incidents: [{kind: gpu_down, target: 0, at_ns: 0}]}",
+         "{version: 1, detection: immediate, incidents: [{kind: nic_down, target: 0, at_ns: 0}]}",
          "{version: 1, detection: immediate, incidents: [], loads: [{}]}",
          R"({version: 1, detection: immediate, incidents: [{kind: link_down, target: -1, at_ns: 0}]})"}) {
         expect_throw<std::invalid_argument>(
@@ -386,6 +397,294 @@ TEST(FailureTest, StrictParsingRejectsFutureFeaturesAndDuplicateKeys) {
         [&] { static_cast<void>(workload::run_training(scenario)); });
     scenario.failure_script.reset();
     falsity(workload::run_training(scenario).failures.has_value());
+}
+TEST(FailureTest, CapacityChangePreservesActiveTimingAndRestoresDirectionalBaselines) {
+    const auto graph = topology::generate_two_gpu_direct();
+    auto configs = configuration(*graph);
+    configs.at(1).bandwidth = transport::BitsPerSecond{16'000'000'000ULL};
+    const auto link = configs.front().link;
+    transport::TransportRuntime transport{*graph, configs};
+    Runtime failures{Script{{{link.link, sim::SimTimeNs{500}, sim::SimTimeNs{1500},
+                              Kind::LinkDegraded, transport::BitsPerSecond{4'000'000'000ULL}}}},
+                     *graph, transport};
+    sim::Simulation simulation{42};
+    failures.schedule(simulation);
+    Dispatcher dispatcher{
+        transport, failures, [&](sim::SimulationContext& context) {
+            if (context.now().count() == 0) {
+                static_cast<void>(transport.submit_transfer({topology::NodeId{topology::NicId{0}},
+                                                             topology::NodeId{topology::NicId{1}},
+                                                             transport::ByteCount{2500},
+                                                             transport::ByteCount{1000},
+                                                             {link}},
+                                                            context));
+            } else {
+                const auto* service = transport.find_service(link);
+                const bool degraded = context.now().count() == 750;
+                equal(service->queue().configuration().bandwidth.value(),
+                      degraded ? 4'000'000'000ULL : 8'000'000'000ULL);
+                equal(required(service->active_bandwidth()).value(),
+                      degraded ? 8'000'000'000ULL : 4'000'000'000ULL);
+                equal(routing::FabricView{transport}.read(link).bandwidth,
+                      service->queue().configuration().bandwidth);
+            }
+        }};
+    for (const auto time : {0U, 750U, 1750U}) {
+        static_cast<void>(simulation.schedule(
+            {sim::SimTimeNs{time}, sim::EventPriority::Normal, sim::NoOpEvent{time}}));
+    }
+    equal(simulation.run(dispatcher).status, sim::SimulationStatus::Completed);
+    const auto transfer = required(transport.transfer_snapshot(transport::TransferId{0}));
+    equal(required(transfer.completion).timestamp, sim::SimTimeNs{3525});
+    equal(transfer.delivered.bytes, 2500U);
+    equal(transfer.dropped_link_down.bytes, 0U);
+    equal(transport.find_service(configs.at(1).link)->queue().configuration().bandwidth,
+          configs.at(1).bandwidth);
+    equal(transport.capacity_revision(), 2U);
+    equal(graph->operational_revision(), 0U);
+    equal(failures.report().incidents.at(0).dropped.bytes, 0U);
+    equal(failures.report().outcome_version, 3U);
+    equal(failures.report().timeline.at(1).capacity_revision, 1U);
+    equal(failures.report().timeline.back().capacity_revision, 2U);
+    equal(sim::payload_kind(transport::LinkCapacityChangeEvent{link.link, configs.at(0).bandwidth,
+                                                               configs.at(1).bandwidth}),
+          sim::EventPayloadKind::LinkCapacityChange);
+    static_assert(sizeof(sim::Event) == 72);
+}
+TEST(FailureTest, PortSwitchAndLinkRestorationsPreserveOtherDownCausesAndUniqueDrops) {
+    const auto graph = topology::generate_single_rack({2, 1});
+    const auto configs = configuration(*graph);
+    const auto link = configs.front().link;
+    const auto port = graph->find(link.link)->endpoint_b;
+    const auto sw = topology::SwitchId{graph->find(port)->owner.value()};
+    const routing::Path route{configs.at(0).link, configs.at(3).link};
+    transport::TransportRuntime transport{*graph, configs};
+    const Script script{{{link.link, sim::SimTimeNs{100}, sim::SimTimeNs{200}},
+                         {port, sim::SimTimeNs{50}, sim::SimTimeNs{250}, Kind::PortDown},
+                         {sw, sim::SimTimeNs{75}, sim::SimTimeNs{300}, Kind::SwitchDown}}};
+    Runtime failures{script, *graph, transport};
+    sim::Simulation simulation{42};
+    failures.schedule(simulation);
+    Dispatcher dispatcher{
+        transport, failures, [&](sim::SimulationContext& context) {
+            const auto now = context.now().count();
+            if (now == 210) {
+                truth(failures.report().incidents.at(0).recovered);
+                falsity(failures.report().incidents.at(0).effective_operational);
+                return;
+            }
+            if (now == 260) {
+                truth(failures.report().incidents.at(1).recovered);
+                falsity(failures.report().incidents.at(1).effective_operational);
+                return;
+            }
+            static_cast<void>(transport.submit_transfer(
+                {topology::NodeId{topology::NicId{0}}, topology::NodeId{topology::NicId{1}},
+                 transport::ByteCount{now == 0 ? 2500U : 1000U}, transport::ByteCount{1000}, route},
+                context));
+        }};
+    for (const auto time : {0U, 150U, 210U, 260U, 300U}) {
+        static_cast<void>(simulation.schedule(
+            {sim::SimTimeNs{time}, sim::EventPriority::Normal, sim::NoOpEvent{time}}));
+    }
+    equal(simulation.run(dispatcher).status, sim::SimulationStatus::Completed);
+    const auto report = failures.report();
+    equal(report.incidents.at(0).dropped.bytes, 1000U);
+    equal(report.incidents.at(1).dropped.bytes, 2500U);
+    equal(report.incidents.at(2).dropped.bytes, 0U);
+    equal(report.drops.size(), 4U);
+    truth(report.incidents.at(0).effective_operational);
+    truth(report.incidents.at(1).effective_operational);
+    const auto restored = required(transport.transfer_snapshot(transport::TransferId{2}));
+    equal(required(restored.completion).outcome, transport::TransferOutcome::Succeeded);
+}
+TEST(FailureTest, QueueAwareRoutingReadsChangedCapacityWithoutInvalidatingReachabilityCache) {
+    const auto graph = topology::generate_leaf_spine({2, 1, 1, 2});
+    const auto configs = configuration(*graph);
+    transport::TransportRuntime transport{*graph, configs};
+    routing::PathService paths{*graph};
+    const routing::Endpoints endpoints{topology::NodeId{topology::NicId{0}},
+                                       topology::NodeId{topology::NicId{1}}};
+    const auto link = paths.lookup(endpoints).front().at(1).link;
+    Runtime failures{Script{{{link, sim::SimTimeNs{500}, sim::SimTimeNs{1500}, Kind::LinkDegraded,
+                              transport::BitsPerSecond{4'000'000'000ULL}}}},
+                     *graph, transport};
+    routing::Router router{*graph, transport, routing::PolicyRegistry{}, {"queue-aware", 42}};
+    sim::Simulation simulation{42};
+    failures.schedule(simulation);
+    Dispatcher dispatcher{transport, failures, [&](sim::SimulationContext& context) {
+                              static_cast<void>(router.submit({context.now().count(), endpoints,
+                                                               transport::ByteCount{1000},
+                                                               transport::ByteCount{1000}},
+                                                              context));
+                          }};
+    for (const auto time : {0U, 600U}) {
+        static_cast<void>(simulation.schedule(
+            {sim::SimTimeNs{time}, sim::EventPriority::Normal, sim::NoOpEvent{time}}));
+    }
+    equal(simulation.run(dispatcher).status, sim::SimulationStatus::Completed);
+    const auto decisions = router.decisions();
+    equal(decisions.size(), 2U);
+    equal(decisions[0].capacity_revision, 0U);
+    equal(decisions[1].capacity_revision, 1U);
+    different(decisions[0].path, decisions[1].path);
+    equal(decisions[0].operational_revision, decisions[1].operational_revision);
+    equal(router.cache_statistics().invalidations, 0U);
+}
+workload::TrainingScenario gpu_scenario() {
+    auto result = anchor();
+    result.gpus = 64;
+    result.scheduling = scheduling::Configuration{};
+    result.jobs.resize(2);
+    result.jobs.at(0).workers = {topology::GpuId{0}, topology::GpuId{8}};
+    result.jobs.at(1).workers = {topology::GpuId{0}, topology::GpuId{16}};
+    result.jobs.at(1).arrival = sim::SimTimeNs{3000};
+    result.failure_script =
+        Script{{{topology::GpuId{0}, sim::SimTimeNs{2500}, sim::SimTimeNs{10000}, Kind::GpuDown}}};
+    return result;
+}
+TEST(FailureTest, GpuFailureAbortsOwnerDrainsIssuedTrafficAndReadmitsOnlyAfterRestoration) {
+    const auto report = workload::run_training(gpu_scenario());
+    equal(report.jobs.size(), 2U);
+    equal(report.jobs.at(0).state, workload::JobState::Failed);
+    equal(report.jobs.at(0).elapsed_ns, 2500U);
+    equal(report.jobs.at(1).state, workload::JobState::Succeeded);
+    equal(report.jobs.at(1).waiting_ns, 7000U);
+    const auto failures = required(report.failures);
+    equal(failures.incidents.at(0).affected_jobs, std::vector{workload::JobId{0}});
+    equal(failures.incidents.at(0).dropped.bytes, 0U);
+    equal(report.collectives.at(0).outcome, collective::Phase::Cancelled);
+    greater(report.collectives.at(0).delivered_bytes, 0U);
+    equal(workload::resolved_domain_outcome_digest_version(report), 3U);
+}
+TEST(FailureTest, GpuConflictsAndInvalidCapacityAreRejectedBeforeScheduling) {
+    auto scenario = gpu_scenario();
+    scenario.scheduling.reset();
+    expect_throw<std::invalid_argument>(
+        [&] { static_cast<void>(workload::run_training(scenario)); });
+    scenario = gpu_scenario();
+    scenario.gpu_controls.push_back({topology::GpuId{0}, false, sim::SimTimeNs{100}});
+    expect_throw<std::invalid_argument>(
+        [&] { static_cast<void>(workload::run_training(scenario)); });
+    const auto graph = topology::generate_two_gpu_direct();
+    const auto configs = configuration(*graph);
+    transport::TransportRuntime transport{*graph, configs};
+    for (const auto capacity : {0ULL, 8'000'000'000ULL, 9'000'000'000ULL}) {
+        expect_throw<std::invalid_argument>([&] {
+            Runtime invalid{
+                Script{{{configs.front().link.link, sim::SimTimeNs{1}, sim::SimTimeNs{2},
+                         Kind::LinkDegraded, transport::BitsPerSecond{capacity}}}},
+                *graph, transport};
+        });
+    }
+    const Script overlapping{{{configs.front().link.link, sim::SimTimeNs{0}, sim::SimTimeNs{10}},
+                              {configs.front().link.link, sim::SimTimeNs{5}, sim::SimTimeNs{20},
+                               Kind::LinkDegraded, transport::BitsPerSecond{4'000'000'000ULL}}}};
+    expect_throw<std::invalid_argument>([&] { static_cast<void>(validate(overlapping, *graph)); });
+    const Script mismatched{
+        {{topology::PortId{0}, sim::SimTimeNs{0}, std::nullopt, Kind::SwitchDown}}};
+    expect_throw<std::invalid_argument>([&] { static_cast<void>(validate(mismatched, *graph)); });
+    const Script local_port{
+        {{topology::PortId{0}, sim::SimTimeNs{0}, std::nullopt, Kind::PortDown}}};
+    expect_throw<std::invalid_argument>([&] { static_cast<void>(validate(local_port, *graph)); });
+}
+TEST(FailureTest, SwitchFailureAndNewKindsRemainDeterministicAcrossTelemetryModes) {
+    auto scenario = anchor();
+    scenario.gpus = 64;
+    scenario.jobs.resize(2);
+    scenario.jobs.at(0).workers = {topology::GpuId{0}, topology::GpuId{8}};
+    scenario.jobs.at(1).workers = {topology::GpuId{16}, topology::GpuId{24}};
+    scenario.jobs.at(1).arrival = sim::SimTimeNs{12000};
+    scenario.failure_script = Script{
+        {{topology::SwitchId{0}, sim::SimTimeNs{2500}, sim::SimTimeNs{10000}, Kind::SwitchDown}}};
+    const auto reference = workload::run_training(scenario);
+    equal(reference.jobs.at(0).state, workload::JobState::Failed);
+    equal(reference.jobs.at(1).state, workload::JobState::Succeeded);
+    equal(required(reference.failures).incidents.at(0).affected_jobs,
+          std::vector{workload::JobId{0}});
+    for (const auto mode : {telemetry::TelemetryMode::Off, telemetry::TelemetryMode::Summary,
+                            telemetry::TelemetryMode::Sampled, telemetry::TelemetryMode::Full}) {
+        scenario.telemetry.mode = mode;
+        const auto repeated = workload::run_training(scenario);
+        equal(repeated.failures, reference.failures);
+        equal(workload::domain_outcome_digest(repeated),
+              workload::domain_outcome_digest(reference));
+    }
+    auto mutated = reference;
+    mutated.decisions.at(0).capacity_revision = 1;
+    different(workload::domain_outcome_digest(mutated), workload::domain_outcome_digest(reference));
+}
+TEST(FailureTest, ResourceExamplesParseExecuteAndRepeatAcrossModes) {
+    const auto directory =
+        std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path() /
+        "examples/training";
+    for (const std::string name :
+         {"resource-recovery.yaml", "gpu-recovery.yaml", "link-degradation.yaml"}) {
+        std::ifstream stream{directory / name};
+        const std::string yaml{std::istreambuf_iterator<char>{stream},
+                               std::istreambuf_iterator<char>{}};
+        auto scenario = workload::parse_scenario(yaml);
+        const auto reference = workload::run_training(scenario);
+        equal(workload::resolved_domain_outcome_digest_version(reference), 3U);
+        const bool degradation = name == "link-degradation.yaml";
+        equal(reference.jobs.at(0).state,
+              degradation ? workload::JobState::Succeeded : workload::JobState::Failed);
+        equal(reference.jobs.at(1).state, workload::JobState::Succeeded);
+        for (const auto mode :
+             {telemetry::TelemetryMode::Off, telemetry::TelemetryMode::Summary,
+              telemetry::TelemetryMode::Sampled, telemetry::TelemetryMode::Full}) {
+            scenario.telemetry.mode = mode;
+            const auto repeated = workload::run_training(scenario);
+            equal(repeated.failures, reference.failures);
+            equal(workload::domain_outcome_digest(repeated),
+                  workload::domain_outcome_digest(reference));
+        }
+        if (degradation) {
+            equal(required(reference.failures).capacity_revision, 2U);
+            truth(required(reference.failures).drops.empty());
+        }
+    }
+}
+TEST(FailureTest, GpuFailureAtTimeZeroLeavesBlockedJobExplicitlyUnfinished) {
+    auto scenario = gpu_scenario();
+    scenario.jobs.resize(1);
+    scenario.failure_script =
+        Script{{{topology::GpuId{0}, sim::SimTimeNs{0}, std::nullopt, Kind::GpuDown}}};
+    const auto report = workload::run_training(scenario);
+    equal(report.simulation.status, sim::SimulationStatus::Completed);
+    equal(report.jobs.at(0).state, workload::JobState::Waiting);
+    const auto incident = required(report.failures).incidents.at(0);
+    truth(incident.applied);
+    falsity(incident.recovered);
+    falsity(incident.effective_operational);
+}
+TEST(FailureTest, ReservedCapacityRejectsOverflowBeforeAllocatingTransferIds) {
+    const auto graph = topology::generate_two_gpu_direct();
+    const auto configs = configuration(*graph);
+    const auto link = configs.front().link;
+    transport::TransportRuntime transport{*graph, configs};
+    Runtime failures{Script{{{link.link, sim::SimTimeNs{1}, sim::SimTimeNs{2}, Kind::LinkDegraded,
+                              transport::BitsPerSecond{1}}}},
+                     *graph, transport};
+    sim::Simulation simulation{42};
+    failures.schedule(simulation);
+    Dispatcher dispatcher{
+        transport, failures, [&](sim::SimulationContext& context) {
+            const transport::TransferRequest invalid{topology::NodeId{topology::NicId{0}},
+                                                     topology::NodeId{topology::NicId{1}},
+                                                     transport::ByteCount{3'000'000'000ULL},
+                                                     transport::ByteCount{3'000'000'000ULL},
+                                                     {link}};
+            expect_throw<std::overflow_error>(
+                [&] { static_cast<void>(transport.submit_transfer(invalid, context)); });
+            auto valid = invalid;
+            valid.bytes = transport::ByteCount{1};
+            valid.maximum_chunk_bytes = transport::ByteCount{1};
+            equal(transport.submit_transfer(valid, context).id, transport::TransferId{0});
+        }};
+    static_cast<void>(
+        simulation.schedule({sim::SimTimeNs{0}, sim::EventPriority::Normal, sim::NoOpEvent{0}}));
+    equal(simulation.run(dispatcher).status, sim::SimulationStatus::Completed);
 }
 } // namespace
 } // namespace nexuslab::failures

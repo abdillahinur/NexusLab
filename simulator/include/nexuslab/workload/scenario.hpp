@@ -43,5 +43,6 @@ struct TrainingScenario final {
     std::optional<failures::Script> failure_script;
 };
 [[nodiscard]] std::vector<Profile> profiles();
+void validate_failure_controls(const TrainingScenario& scenario);
 [[nodiscard]] TrainingScenario parse_scenario(std::string_view yaml);
 } // namespace nexuslab::workload

@@ -33,6 +33,13 @@ struct LinkStateChangeEvent final {
     bool operator==(const LinkStateChangeEvent&) const = default;
 };
 
+struct LinkCapacityChangeEvent final {
+    topology::LinkId link;
+    BitsPerSecond forward;
+    BitsPerSecond reverse;
+    bool operator==(const LinkCapacityChangeEvent&) const = default;
+};
+
 struct PortStateChangeEvent final {
     topology::PortId port;
     topology::OperationalState state;

@@ -6,9 +6,79 @@
 #include "nexuslab/topology/export.hpp"
 #include "nexuslab/workload/engine.hpp"
 #include <algorithm>
+#include <limits>
 #include <tuple>
+#include <type_traits>
 
 namespace nexuslab::failures {
+std::uint64_t target_value(const Target& target) {
+    return std::visit([](auto id) { return id.value(); }, target);
+}
+std::string_view kind_name(Kind kind) {
+    switch (kind) {
+    case Kind::LinkDown:
+        return "link_down";
+    case Kind::LinkDegraded:
+        return "link_degraded";
+    case Kind::PortDown:
+        return "port_down";
+    case Kind::SwitchDown:
+        return "switch_down";
+    case Kind::GpuDown:
+        return "gpu_down";
+    }
+    throw std::invalid_argument{"unknown failure kind"};
+}
+namespace {
+std::pair<unsigned, std::uint64_t> resource_key(const Incident& incident) {
+    return {static_cast<unsigned>(incident.target.index()) + 1U, target_value(incident.target)};
+}
+void validate_port_target(const Incident& incident, const topology::TopologyGraph& graph) {
+    const auto* id = std::get_if<topology::PortId>(&incident.target);
+    const auto* port = id == nullptr ? nullptr : graph.find(*id);
+    if (port == nullptr || port->role == topology::PortRole::Local ||
+        port->state != topology::OperationalState::Up) {
+        throw std::invalid_argument{"failure target must be an initially up fabric port"};
+    }
+    if (port->owner.kind() == topology::NodeKind::Switch &&
+        graph.find(topology::SwitchId{port->owner.value()})->state !=
+            topology::OperationalState::Up) {
+        throw std::invalid_argument{"failure port owner is initially down"};
+    }
+}
+void validate_target(const Incident& incident, const topology::TopologyGraph& graph) {
+    if (incident.kind == Kind::LinkDown || incident.kind == Kind::LinkDegraded) {
+        const auto* id = std::get_if<topology::LinkId>(&incident.target);
+        const auto* link = id == nullptr ? nullptr : graph.find(*id);
+        if (link == nullptr || link->kind != topology::LinkKind::Fabric) {
+            throw std::invalid_argument{"failure target must be a known fabric link"};
+        }
+        for (const auto& arc : topology::directed_links(*link)) {
+            if (!graph.is_operational(arc)) {
+                throw std::invalid_argument{"failure target is initially blocked"};
+            }
+        }
+        return;
+    }
+    if (incident.kind == Kind::PortDown) {
+        validate_port_target(incident, graph);
+        return;
+    }
+    if (incident.kind == Kind::SwitchDown) {
+        const auto* id = std::get_if<topology::SwitchId>(&incident.target);
+        const auto* sw = id == nullptr ? nullptr : graph.find(*id);
+        if (sw == nullptr || sw->state != topology::OperationalState::Up) {
+            throw std::invalid_argument{"failure target must be an initially up switch"};
+        }
+        return;
+    }
+    const auto* id = std::get_if<topology::GpuId>(&incident.target);
+    if (id == nullptr || graph.find(*id) == nullptr ||
+        id->value() > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::invalid_argument{"failure target must be a known GPU"};
+    }
+}
+} // namespace
 std::string_view transition_name(telemetry::FailureTransition transition) {
     switch (transition) {
     case telemetry::FailureTransition::Scheduled:
@@ -34,15 +104,13 @@ std::vector<Action> validate(const Script& script, const topology::TopologyGraph
     std::vector<Action> actions;
     for (std::size_t i = 0; i < script.incidents.size(); ++i) {
         const auto& incident = script.incidents[i];
-        const auto* link = graph.find(incident.target);
-        if (link == nullptr || link->kind != topology::LinkKind::Fabric ||
-            link->state != topology::OperationalState::Up) {
-            throw std::invalid_argument{"failure target must be an initially up fabric link"};
+        static_cast<void>(kind_name(incident.kind));
+        validate_target(incident, graph);
+        if ((incident.kind == Kind::LinkDegraded) != incident.bandwidth.has_value()) {
+            throw std::invalid_argument{"only degraded links require bandwidth_bps"};
         }
-        for (const auto& arc : topology::directed_links(*link)) {
-            if (!graph.is_operational(arc)) {
-                throw std::invalid_argument{"failure target is initially blocked"};
-            }
+        if (incident.bandwidth.has_value() && incident.bandwidth->value() == 0) {
+            throw std::invalid_argument{"degraded capacity must be positive"};
         }
         if (incident.recovery.has_value() && *incident.recovery <= incident.onset) {
             throw std::invalid_argument{"failure recovery must follow onset"};
@@ -54,14 +122,13 @@ std::vector<Action> validate(const Script& script, const topology::TopologyGraph
         }
     }
     std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
-        const auto& x = script.incidents[a];
-        const auto& y = script.incidents[b];
-        return std::tie(x.target, x.onset) < std::tie(y.target, y.onset);
+        return std::tuple{resource_key(script.incidents[a]), script.incidents[a].onset} <
+               std::tuple{resource_key(script.incidents[b]), script.incidents[b].onset};
     });
     for (std::size_t i = 1; i < order.size(); ++i) {
         const auto& previous = script.incidents[order[i - 1]];
         const auto& next = script.incidents[order[i]];
-        if (previous.target == next.target &&
+        if (resource_key(previous) == resource_key(next) &&
             (!previous.recovery.has_value() || *previous.recovery > next.onset)) {
             throw std::invalid_argument{"overlapping failure episodes on the same target"};
         }
@@ -97,45 +164,126 @@ std::uint64_t script_digest(const Script& script, const topology::TopologyGraph&
     for (std::size_t i = 0; i < script.incidents.size(); ++i) {
         const auto& incident = script.incidents[i];
         integer(i + 1);
-        integer(1);
-        integer(incident.target.value());
+        integer(static_cast<std::uint64_t>(incident.kind));
+        integer(target_value(incident.target));
         integer(incident.onset.count());
         integer(incident.recovery.has_value() ? 1 : 0);
         if (incident.recovery.has_value()) {
             integer(incident.recovery->count());
         }
-        integer(0);
+        integer(incident.bandwidth.has_value() ? 1 : 0);
+        if (incident.bandwidth.has_value()) {
+            integer(incident.bandwidth->value());
+        }
     }
     integer(0);
     return hash;
 }
 Runtime::Runtime(const Script& script, topology::TopologyGraph& graph,
                  transport::TransportRuntime& transport, const collective::RingExecutor* ring,
-                 const workload::WorkloadEngine* jobs, Limits limits)
+                 workload::WorkloadEngine* jobs, Limits limits)
     : graph_{&graph}, transport_{&transport}, ring_{ring}, jobs_{jobs}, limits_{limits},
       report_{script_digest(script, graph), {}, {}, {}},
       calendar_{validate(script, graph, limits)} {
     for (std::size_t i = 0; i < script.incidents.size(); ++i) {
         const auto& incident = script.incidents[i];
-        for (const auto& arc : topology::directed_links(*graph.find(incident.target))) {
-            if (transport.find_service(arc.id) == nullptr) {
+        if (incident.kind == Kind::LinkDown || incident.kind == Kind::LinkDegraded) {
+            const auto id = std::get<topology::LinkId>(incident.target);
+            const auto* a = transport.find_service({id, topology::LinkDirection::AToB});
+            const auto* b = transport.find_service({id, topology::LinkDirection::BToA});
+            if (a == nullptr || b == nullptr) {
                 throw std::invalid_argument{"failure target requires both configured directions"};
             }
+            baseline_.insert_or_assign(id, std::array{a->queue().configuration().bandwidth,
+                                                      b->queue().configuration().bandwidth});
+            if (incident.bandwidth.has_value() &&
+                (*incident.bandwidth >= a->queue().configuration().bandwidth ||
+                 *incident.bandwidth >= b->queue().configuration().bandwidth)) {
+                throw std::invalid_argument{"degraded capacity must be below both baselines"};
+            }
+        }
+        if (incident.kind == Kind::GpuDown &&
+            (jobs_ == nullptr ||
+             !jobs_->resource(std::get<topology::GpuId>(incident.target)).healthy)) {
+            throw std::invalid_argument{"GPU failure requires scheduler and initially healthy GPU"};
+        }
+        if (incident.kind != Kind::LinkDown) {
+            report_.outcome_version = 3;
         }
         report_.incidents.push_back(
             {telemetry::FailureId{i + 1}, incident, false, false, true, {}, {}});
     }
+    // Reserve only after validating every incident, before any event or transfer exists.
+    for (const auto& incident : script.incidents) {
+        if (incident.bandwidth.has_value()) {
+            transport.reserve_capacity(std::get<topology::LinkId>(incident.target),
+                                       *incident.bandwidth);
+        }
+    }
     transport_->set_down_drop_observer(this);
 }
 Runtime::~Runtime() { transport_->set_down_drop_observer(nullptr); }
-bool Runtime::operational(topology::LinkId link) const {
-    const auto arcs = topology::directed_links(*graph_->find(link));
-    return graph_->is_operational(arcs[0]) && graph_->is_operational(arcs[1]);
+Runtime::ResourceKey Runtime::key(const Incident& incident) { return resource_key(incident); }
+bool Runtime::operational(const Incident& incident) const {
+    return std::visit(
+        [this](auto id) {
+            using Id = decltype(id);
+            if constexpr (std::is_same_v<Id, topology::LinkId>) {
+                const auto arcs = topology::directed_links(*graph_->find(id));
+                return graph_->is_operational(arcs[0]) && graph_->is_operational(arcs[1]);
+            } else if constexpr (std::is_same_v<Id, topology::PortId>) {
+                const auto* port = graph_->find(id);
+                const bool owner_up =
+                    port->owner.kind() != topology::NodeKind::Switch ||
+                    graph_->find(topology::SwitchId{port->owner.value()})->state ==
+                        topology::OperationalState::Up;
+                return port->state == topology::OperationalState::Up && owner_up;
+            } else if constexpr (std::is_same_v<Id, topology::SwitchId>) {
+                return graph_->find(id)->state == topology::OperationalState::Up;
+            } else {
+                return jobs_->resource(id).healthy;
+            }
+        },
+        incident.target);
 }
 void Runtime::transition(std::size_t index, telemetry::FailureTransition kind, sim::SimTimeNs now) {
     auto& incident = report_.incidents.at(index);
-    incident.effective_operational = operational(incident.specification.target);
-    report_.timeline.push_back({incident.id, kind, now, incident.effective_operational});
+    incident.effective_operational = operational(incident.specification);
+    incident.capacity_revision = transport_->capacity_revision();
+    report_.timeline.push_back(
+        {incident.id, kind, now, incident.effective_operational, incident.capacity_revision});
+}
+sim::EventPayload Runtime::event(const Action& action) const {
+    const auto& incident = report_.incidents.at(action.incident).specification;
+    const auto state =
+        action.recovery ? topology::OperationalState::Up : topology::OperationalState::Down;
+    switch (incident.kind) {
+    case Kind::LinkDown:
+        return transport::LinkStateChangeEvent{std::get<topology::LinkId>(incident.target), state};
+    case Kind::LinkDegraded: {
+        const auto link = std::get<topology::LinkId>(incident.target);
+        const auto baseline = baseline_.at(link);
+        if (action.recovery) {
+            return transport::LinkCapacityChangeEvent{link, baseline[0], baseline[1]};
+        }
+        if (!incident.bandwidth.has_value()) {
+            throw std::logic_error{"missing degraded capacity"};
+        }
+        return transport::LinkCapacityChangeEvent{link, *incident.bandwidth, *incident.bandwidth};
+    }
+    case Kind::PortDown:
+        return transport::PortStateChangeEvent{std::get<topology::PortId>(incident.target), state};
+    case Kind::SwitchDown:
+        return transport::SwitchStateChangeEvent{std::get<topology::SwitchId>(incident.target),
+                                                 state};
+    case Kind::GpuDown:
+        return workload::WorkloadEvent{
+            workload::JobId{0},
+            action.recovery ? workload::WorkloadEventKind::GpuUp
+                            : workload::WorkloadEventKind::GpuDown,
+            static_cast<std::uint32_t>(std::get<topology::GpuId>(incident.target).value())};
+    }
+    throw std::logic_error{"unknown incident kind"};
 }
 void Runtime::schedule(sim::Simulation& simulation) {
     if (scheduled_ || simulation.now().count() != 0) {
@@ -146,47 +294,114 @@ void Runtime::schedule(sim::Simulation& simulation) {
         transition(i, telemetry::FailureTransition::Scheduled, sim::SimTimeNs{0});
     }
     for (const auto& action : calendar_) {
-        const auto& incident = report_.incidents[action.incident];
-        const auto event = simulation.schedule(
-            {action.timestamp, sim::EventPriority::Critical,
-             transport::LinkStateChangeEvent{incident.specification.target,
-                                             action.recovery ? topology::OperationalState::Up
-                                                             : topology::OperationalState::Down}});
-        pending_.emplace(event, action);
+        pending_.emplace(
+            simulation.schedule({action.timestamp, sim::EventPriority::Critical, event(action)}),
+            action);
     }
 }
-void Runtime::handle(const transport::LinkStateChangeEvent& event,
-                     sim::SimulationContext& context) {
+bool Runtime::owns(sim::EventId event_id) const { return pending_.contains(event_id); }
+void Runtime::apply(const sim::EventPayload& payload, sim::SimulationContext& context) {
+    std::visit(
+        [this, &context](const auto& value) {
+            using E = std::remove_cvref_t<decltype(value)>;
+            if constexpr (std::is_same_v<E, transport::LinkStateChangeEvent>) {
+                transport_->handle_link_state_change(value, context);
+            } else if constexpr (std::is_same_v<E, transport::PortStateChangeEvent>) {
+                transport_->handle_port_state_change(value, context);
+            } else if constexpr (std::is_same_v<E, transport::SwitchStateChangeEvent>) {
+                transport_->handle_switch_state_change(value, context);
+            } else if constexpr (std::is_same_v<E, transport::LinkCapacityChangeEvent>) {
+                transport_->handle_capacity_change(value, context);
+            } else if constexpr (std::is_same_v<E, workload::WorkloadEvent>) {
+                jobs_->handle(value, context);
+            } else {
+                throw std::logic_error{"unexpected failure action payload"};
+            }
+        },
+        payload);
+}
+void Runtime::process(const sim::EventPayload& payload, sim::SimulationContext& context) {
     const auto found = pending_.find(context.current_event_id());
     if (found == pending_.end()) {
         throw std::logic_error{"unregistered scripted failure action"};
     }
     const auto action = found->second;
     auto& incident = report_.incidents.at(action.incident);
-    const auto expected =
-        action.recovery ? topology::OperationalState::Up : topology::OperationalState::Down;
-    if (event.link != incident.specification.target || event.state != expected ||
-        context.now() != action.timestamp) {
+    if (payload != event(action) || context.now() != action.timestamp) {
         throw std::logic_error{"scripted failure action identity mismatch"};
     }
     if (action.recovery) {
         transition(action.incident, telemetry::FailureTransition::RecoveryStarted, context.now());
-        transport_->handle_link_state_change(event, context);
-        active_.erase(event.link);
+        apply(payload, context);
+        active_.erase(key(incident.specification));
         incident.recovered = true;
         transition(action.incident, telemetry::FailureTransition::Recovered, context.now());
     } else {
-        active_.emplace(event.link, action.incident);
+        active_.emplace(key(incident.specification), action.incident);
         incident.applied = true;
-        transport_->handle_link_state_change(event, context);
+        if (incident.specification.kind == Kind::GpuDown) {
+            const auto owner =
+                jobs_->resource(std::get<topology::GpuId>(incident.specification.target)).owner;
+            if (owner.has_value()) {
+                affect_job(action.incident, *owner);
+            }
+        }
+        apply(payload, context);
         transition(action.incident, telemetry::FailureTransition::Applied, context.now());
         transition(action.incident, telemetry::FailureTransition::Detected, context.now());
     }
     pending_.erase(found);
 }
+void Runtime::handle(const transport::LinkStateChangeEvent& event_value,
+                     sim::SimulationContext& context) {
+    process(event_value, context);
+}
+void Runtime::handle(const transport::PortStateChangeEvent& event_value,
+                     sim::SimulationContext& context) {
+    process(event_value, context);
+}
+void Runtime::handle(const transport::SwitchStateChangeEvent& event_value,
+                     sim::SimulationContext& context) {
+    process(event_value, context);
+}
+void Runtime::handle(const transport::LinkCapacityChangeEvent& event_value,
+                     sim::SimulationContext& context) {
+    process(event_value, context);
+}
+void Runtime::handle(const workload::WorkloadEvent& event_value, sim::SimulationContext& context) {
+    process(event_value, context);
+}
+void Runtime::affect_job(std::size_t index, workload::JobId job) {
+    auto& incident = report_.incidents.at(index);
+    if (affected_.contains({incident.id, job})) {
+        return;
+    }
+    if (affected_.size() >= limits_.affected_jobs) {
+        throw std::length_error{"failure affected-job limit exceeded"};
+    }
+    incident.affected_jobs.push_back(job);
+    affected_.emplace(incident.id, job);
+}
 void Runtime::on_down_drop(const transport::DownDrop& drop) {
-    const auto found = active_.find(drop.link.link);
-    if (found == active_.end()) {
+    const auto* link = graph_->find(drop.link.link);
+    std::vector<ResourceKey> keys{
+        {1, drop.link.link.value()}, {2, link->endpoint_a.value()}, {2, link->endpoint_b.value()}};
+    for (const auto port : {link->endpoint_a, link->endpoint_b}) {
+        const auto owner = graph_->find(port)->owner;
+        if (owner.kind() == topology::NodeKind::Switch) {
+            keys.emplace_back(3, owner.value());
+        }
+    }
+    const auto not_found = report_.incidents.size();
+    std::size_t selected = not_found;
+    for (const auto& candidate : keys) {
+        const auto found = active_.find(candidate);
+        if (found != active_.end() &&
+            report_.incidents[found->second].specification.kind != Kind::LinkDegraded) {
+            selected = std::min(selected, found->second);
+        }
+    }
+    if (selected == not_found) {
         return;
     }
     if (attributed_.size() >= limits_.attributed_chunks) {
@@ -195,7 +410,7 @@ void Runtime::on_down_drop(const transport::DownDrop& drop) {
     if (!attributed_.insert(drop.chunk).second) {
         throw std::logic_error{"chunk attributed to a failure twice"};
     }
-    auto& incident = report_.incidents.at(found->second);
+    auto& incident = report_.incidents.at(selected);
     std::optional<workload::JobId> job;
     if (ring_ != nullptr && jobs_ != nullptr) {
         const auto collective = ring_->owner(drop.transfer);
@@ -209,20 +424,18 @@ void Runtime::on_down_drop(const transport::DownDrop& drop) {
             }
         }
     }
-    if (job.has_value() && !affected_.contains({incident.id, *job})) {
-        if (affected_.size() >= limits_.affected_jobs) {
-            throw std::length_error{"failure affected-job limit exceeded"};
-        }
-        incident.affected_jobs.push_back(*job);
-        affected_.emplace(incident.id, *job);
+    if (job.has_value()) {
+        affect_job(selected, *job);
     }
     incident.dropped = transport::add_traffic(incident.dropped, {drop.bytes.value(), 1});
     report_.drops.push_back({incident.id, drop, job});
 }
 Report Runtime::report() const {
     Report result = report_;
+    result.capacity_revision = transport_->capacity_revision();
     for (auto& incident : result.incidents) {
-        incident.effective_operational = operational(incident.specification.target);
+        incident.effective_operational = operational(incident.specification);
+        incident.capacity_revision = result.capacity_revision;
     }
     return result;
 }

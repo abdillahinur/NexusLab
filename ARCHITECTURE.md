@@ -13,18 +13,21 @@ Clusters 20–23, and expanded Clusters 14–16 are not implemented or gate-appr
 subsystem details will be promoted into the approved sections only after review. The
 [master engineering plan](NEXUSLAB_MASTER_PLAN.md) remains the source of truth.
 
-## Cluster 9 link-failure slice
+## Cluster 9 resource and capacity slices
 
-[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. The first slice adds
-strict link down/up scripts, a bounded per-run coordinator, canonical action order/script identity,
-domain lifecycle/drop attribution, and the 512-GPU spine-link demo. Transport and workload retain
-state/outcome ownership; a borrowed drop observer and read-only ownership lookups correlate lost
-chunks with incidents and jobs. Existing link-state events are reused, so event size is unchanged.
+[ADR-019](docs/adr/ADR-019-deterministic-failure-lifecycle.md) is accepted. Scripts support link
+down/up, link degradation, port/switch down/up and scheduler-owned persistent GPU failure/recovery.
+A bounded per-run coordinator owns canonical ordering, identity and drop/job attribution; domain
+owners retain queue, routing, job and inventory authority. Recovery does not retry or resume work.
 
-The [implementation plan](docs/design/failure-injection.md) distinguishes this slice from pending
-capacity/resource extensions, loads, no-route attribution and catalog-v2 reconstruction/export.
-Scripted CLI JSON export is rejected until it can represent complete failure state. Clusters 0–8
-remain gate-approved; Cluster 9 is not complete and Gate 9 remains pending.
+Capacity changes pin active serialization timing, update rates for subsequent starts, restore each
+direction's baseline and expose monotonic capacity revisions to route decisions and incident
+snapshots. Typed capacity event kind 9 fits the unchanged 72-byte event envelope. Strong variant
+targets and resource keys preserve overlap semantics; restoration never overrides another down cause.
+
+The [implementation plan](docs/design/failure-injection.md) distinguishes these slices from pending
+background loads, no-route attribution and catalog-v2 reconstruction/export. Scripted CLI JSON
+export remains rejected. Clusters 0–8 remain gate-approved; Cluster 9 and Gate 9 remain open.
 
 ## System boundary
 

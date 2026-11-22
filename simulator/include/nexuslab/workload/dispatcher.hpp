@@ -18,7 +18,11 @@ class TrainingDispatcher final {
         throw std::logic_error{"unexpected no-op in training simulation"};
     }
     void operator()(const WorkloadEvent& e, sim::SimulationContext& c) {
-        jobs_.handle(e, c);
+        if (failures_ != nullptr && failures_->owns(c.current_event_id())) {
+            failures_->handle(e, c);
+        } else {
+            jobs_.handle(e, c);
+        }
         pump(c);
     }
     void operator()(const collective::LocalCompletionEvent& e, sim::SimulationContext& c) {
@@ -42,11 +46,27 @@ class TrainingDispatcher final {
         pump(c);
     }
     void operator()(const transport::PortStateChangeEvent& e, sim::SimulationContext& c) {
-        transport_.handle_port_state_change(e, c);
+        if (failures_ != nullptr) {
+            failures_->handle(e, c);
+        } else {
+            transport_.handle_port_state_change(e, c);
+        }
         pump(c);
     }
     void operator()(const transport::SwitchStateChangeEvent& e, sim::SimulationContext& c) {
-        transport_.handle_switch_state_change(e, c);
+        if (failures_ != nullptr) {
+            failures_->handle(e, c);
+        } else {
+            transport_.handle_switch_state_change(e, c);
+        }
+        pump(c);
+    }
+    void operator()(const transport::LinkCapacityChangeEvent& e, sim::SimulationContext& c) {
+        if (failures_ != nullptr) {
+            failures_->handle(e, c);
+        } else {
+            transport_.handle_capacity_change(e, c);
+        }
         pump(c);
     }
 

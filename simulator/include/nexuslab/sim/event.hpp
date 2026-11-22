@@ -33,7 +33,7 @@ using EventPayload =
     std::variant<NoOpEvent, transport::ChunkArrivalEvent, transport::TransmissionCompleteEvent,
                  transport::LinkStateChangeEvent, transport::PortStateChangeEvent,
                  transport::SwitchStateChangeEvent, workload::WorkloadEvent,
-                 collective::LocalCompletionEvent>;
+                 collective::LocalCompletionEvent, transport::LinkCapacityChangeEvent>;
 
 struct EventSpec final {
     SimTimeNs timestamp;

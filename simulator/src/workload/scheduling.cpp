@@ -6,6 +6,13 @@
 #include <limits>
 #include <stdexcept>
 namespace nexuslab::workload {
+scheduling::Resource WorkloadEngine::resource(topology::GpuId gpu) const {
+    if (!inventory_ || gpu.value() >= inventory_->view().gpus.size()) {
+        throw std::invalid_argument{"GPU failure requires scheduler and known GPU"};
+    }
+    return inventory_->view().gpus[static_cast<std::size_t>(gpu.value())];
+}
+
 sim::EventId WorkloadEngine::schedule_gpu_state(topology::GpuId gpu, bool healthy,
                                                 sim::SimTimeNs when,
                                                 sim::Simulation& simulation) const {

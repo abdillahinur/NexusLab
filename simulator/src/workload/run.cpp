@@ -25,6 +25,7 @@ void append_waiting_jobs(TrainingReport& report, const WorkloadEngine& jobs, std
 }
 } // namespace
 TrainingReport run_training(const TrainingScenario& scenario) {
+    validate_failure_controls(scenario);
     if (scenario.controls.size() > 10000 || scenario.gpu_controls.size() > 10000) {
         throw std::length_error{"scenario control limit exceeded"};
     }
@@ -148,15 +149,17 @@ void write_report(const TrainingReport& report, std::ostream& output, bool inclu
     if (report.failures.has_value()) {
         output << "failure_script_digest=" << std::hex << std::setfill('0') << std::setw(16)
                << report.failures->script_digest << std::dec << std::setfill(' ') << '\n';
-        output << "domain_outcome_digest_version=2\n";
+        output << "domain_outcome_digest_version=" << report.failures->outcome_version << '\n';
         for (const auto& incident : report.failures->incidents) {
             output << "failure=" << incident.id.value()
-                   << " link=" << incident.specification.target.value()
+                   << " kind=" << failures::kind_name(incident.specification.kind)
+                   << " resource=" << failures::target_value(incident.specification.target)
                    << " applied=" << incident.applied << " recovered=" << incident.recovered
                    << " effective_operational=" << incident.effective_operational
                    << " dropped_bytes=" << incident.dropped.bytes
                    << " dropped_chunks=" << incident.dropped.chunks
-                   << " affected_jobs=" << incident.affected_jobs.size() << '\n';
+                   << " affected_jobs=" << incident.affected_jobs.size()
+                   << " capacity_revision=" << incident.capacity_revision << '\n';
         }
     }
     if (include_timeline) {

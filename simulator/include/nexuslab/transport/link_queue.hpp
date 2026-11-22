@@ -77,6 +77,7 @@ class DirectedLinkQueue final {
     explicit DirectedLinkQueue(DirectedLinkConfiguration configuration);
 
     [[nodiscard]] const DirectedLinkConfiguration& configuration() const noexcept;
+    void set_bandwidth(BitsPerSecond bandwidth);
     [[nodiscard]] const TransferChunk* active() const noexcept;
     [[nodiscard]] QueueSnapshot snapshot() const noexcept;
     [[nodiscard]] const TransferChunk* next_waiting() const noexcept;

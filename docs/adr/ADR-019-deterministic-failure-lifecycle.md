@@ -10,9 +10,9 @@ SPDX-License-Identifier: Apache-2.0
 Accepted — 2026-11-22 after contract review. This authorizes incremental Cluster 9 implementation;
 it does not record complete implementation or Gate 9 approval. ADR-012 through ADR-018 retain their reserved
 numbers. The [execution plan](../design/failure-injection.md) defines the implementation slices and
-acceptance evidence. The master plan's complete Cluster 9 scope remains required. The first link-only vertical slice
-is implemented; capacity/resource extensions, loads, no-route attribution, and catalog-v2
-serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
+acceptance evidence. The master plan's complete Cluster 9 scope remains required.
+Link/port/switch/GPU incidents and capacity degradation are implemented. Background loads,
+no-route attribution, and catalog-v2 serialization remain pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
 explicitly; domain reports and human timelines are the supported failure evidence.
 
 ## Context
@@ -205,7 +205,8 @@ Reserved metric IDs 100–104 retain their numeric IDs and units. Define:
   configured impaired interval; it is not queue drain time or application recovery latency.
 
 These exact semantics activate the previously reserved definitions under metric catalog version 2.
-Scripted runs select catalog version 2; legacy runs without failure_script retain catalog version 1
+On completion of the telemetry slice, scripted runs select catalog version 2; legacy runs without
+failure_script retain catalog version 1
 and their original bytes. Both catalogs must remain available for reconstruction, with explicit
 version selection and golden fixtures; version 1 artifacts remain immutable. Preserve telemetry logical schema version 1 using documented optional
 additive incident/health/capacity fields; absent fields retain the old encoding. FailureObservation
@@ -233,10 +234,10 @@ this digest. It is a reproducibility checksum, not a security primitive or Nexus
 Bounds and baseline/effective transport parameters remain recorded scenario inputs, independently
 of this script digest. Comparison tests must hold complete resolved topology, workload, placement,
 transport parameters, seed and script fixed and vary only routing. Equal script digests alone do
-not prove controlled experiments. The existing domain outcome digest remains version 1 for
-legacy runs; scripted runs use version 2 including incident terminal states, effective health,
-capacity revisions, load outcomes and attribution. These records are domain state even with
-telemetry off. Preserve the old encoding and add new golden vectors; do not relabel old hashes.
+not prove controlled experiments. The domain outcome digest remains version 1 for legacy runs; link-only scripts retain version 2,
+and resource/capacity scripts use version 3 with explicit revision metadata. Incident state,
+effective health and attribution are domain facts even with telemetry off. Background loads
+require an explicit future digest-version decision when implemented. Preserve the old encoding and add new golden vectors; do not relabel old hashes.
 
 ## Consequences
 
@@ -253,3 +254,40 @@ Review this decision before adding delayed detection, overlapping same-target in
 mid-flight bandwidth rescheduling, NIC/rail failures, or recovery-policy comparisons. Event-envelope
 or material queue/pending-state changes require the existing Gate 1 measurements. No placeholder
 metrics, unexecuted demo or architecture document constitutes gate evidence.
+
+## Resource/capacity refinement — 2026-11-22
+
+The coordinator now normalizes targets as a variant of strong LinkId, PortId, SwitchId and GpuId
+values; kind/target mismatches are rejected. Link-down and degraded episodes share one physical
+resource key, so they cannot overlap on the same link. Distinct resource kinds with equal numeric
+IDs remain independent. Fabric ports are supported; local GPU–NIC attachment ports are rejected.
+GPU incidents require scheduler-owned health and cannot share a GPU with legacy gpu_controls.
+
+Link, port, switch and GPU actions reuse their existing typed events. Capacity changes introduce
+LinkCapacityChangeEvent with stable trace kind 9; previous kind numbers and variant positions remain
+unchanged. Its two bandwidth fields permit exact restoration of asymmetric direction baselines.
+The payload fits the existing 32-byte variant and the complete Event remains 72 bytes. A service's
+scheduled completion and active_bandwidth snapshot retain its start-time serialization rate.
+Only future service starts use the changed queue capacity. Propagation and buffers remain fixed.
+
+At bootstrap the transport retains the minimum scripted bandwidth per affected direction for
+future admission-time arithmetic validation. An unrepresentable serialization duration is rejected
+before allocating transfer IDs. Actual service-start timestamps are checked again; overflow from
+unpredictable waiting time fails the run. Capacity updates validate both directions and revision
+arithmetic before ordinary mutation; memory exhaustion retains the existing fatal-run contract.
+
+Capacity-only changes increment a separate monotonic capacity_revision, once per physical-link
+update, and do not change topology operational_revision or rebuild reachability candidates.
+Routing decisions and incident/timeline domain snapshots retain capacity revisions. Queue-aware
+scoring reads effective capacity through the existing FabricView. A recovered link remains
+unavailable under a down port or switch. Later down-arrival drops select the lowest active
+incident ID among the arc's link, endpoint ports and endpoint switches, without scanning all
+incidents. GPU failure attributes its owner before abort/release; draining traffic is not dropped.
+
+The version-1 script digest uses the kind/capacity slots already specified above. Existing link-only
+script goldens remain unchanged. Runs with new resource kinds use domain outcome digest version 3,
+which adds global, routing, incident and timeline capacity revisions; legacy no-script runs retain
+version 1 and link-only scripts retain version 2. Use resolved_domain_outcome_digest_version(report).
+Future fields need another explicit version decision; version 3 must not be silently extended.
+Catalog-v2 failure telemetry/export remains pending and scripted CLI JSON/JSONL remains rejected.
+This refinement does not approve Gate 9 or introduce retries, background traffic or real actuation.

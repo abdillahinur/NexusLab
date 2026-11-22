@@ -181,7 +181,7 @@ std::uint64_t domain_outcome_digest(const TrainingReport& report) noexcept {
     digest.add(report.maximum_waiting_bytes);
     if (report.failures.has_value()) {
         digest.add(std::string_view{"nexuslab.domain-outcome"});
-        digest.add(2);
+        digest.add(report.failures->outcome_version);
         digest.add(report.failures->script_digest);
         digest.add(report.failures->incidents.size());
         for (const auto& incident : report.failures->incidents) {
@@ -218,6 +218,19 @@ std::uint64_t domain_outcome_digest(const TrainingReport& report) noexcept {
             }
         }
     }
+    if (report.failures.has_value() && report.failures->outcome_version >= 3) {
+        digest.add(report.failures->capacity_revision);
+        for (const auto& decision : report.decisions) {
+            digest.add(decision.capacity_revision);
+        }
+        for (const auto& incident : report.failures->incidents) {
+            digest.add(incident.capacity_revision);
+        }
+        for (const auto& transition : report.failures->timeline) {
+            digest.add(transition.capacity_revision);
+        }
+    }
+
     return digest.value();
 }
 

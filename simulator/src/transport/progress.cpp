@@ -25,7 +25,10 @@ void TransportRuntime::validate_timing(ByteCount bytes,
             throw std::invalid_argument{"route uses an unconfigured link"};
         }
         const auto& config = service->queue().configuration();
-        const auto delay = serialization_delay(bytes, config.bandwidth);
+        const auto minimum = minimum_bandwidth_.find(link);
+        const auto bandwidth =
+            minimum == minimum_bandwidth_.end() ? config.bandwidth : minimum->second;
+        const auto delay = serialization_delay(bytes, bandwidth);
         if (!delay.has_value()) {
             throw std::overflow_error{"serialization delay exceeds simulated-time range"};
         }

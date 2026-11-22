@@ -7,6 +7,13 @@
 #include <stdexcept>
 
 namespace nexuslab::transport {
+void DirectedLinkQueue::set_bandwidth(BitsPerSecond bandwidth) {
+    if (bandwidth.value() == 0) {
+        throw std::invalid_argument{"bandwidth must be positive"};
+    }
+    configuration_.bandwidth = bandwidth;
+}
+
 namespace {
 
 void validate_configuration(const DirectedLinkConfiguration& configuration) {

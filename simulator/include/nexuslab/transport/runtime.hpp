@@ -124,6 +124,11 @@ class TransportRuntime final {
 
     // Observer is borrowed and must disconnect before destruction; only one owner may attach.
     void set_down_drop_observer(DownDropObserver* observer);
+    // Bootstrap-only lower bound for timing validation of future submitted chunks.
+    void reserve_capacity(topology::LinkId link, BitsPerSecond minimum);
+    void handle_capacity_change(const LinkCapacityChangeEvent& event,
+                                sim::SimulationContext& context);
+    [[nodiscard]] std::uint64_t capacity_revision() const noexcept;
     void register_chunk(RoutedChunk routed_chunk);
     [[nodiscard]] SubmittedTransfer submit_transfer(const TransferRequest& request,
                                                     sim::SimulationContext& context);
@@ -205,6 +210,8 @@ class TransportRuntime final {
     topology::TopologyGraph* topology_;
     TransportLimits limits_;
     DownDropObserver* down_drop_observer_{nullptr};
+    std::map<topology::DirectedLinkId, BitsPerSecond> minimum_bandwidth_;
+    std::uint64_t capacity_revision_{0};
     telemetry::TelemetrySink telemetry_;
     std::size_t route_entries_{0};
     std::map<TransferId, TransferRecord> transfers_;

@@ -3,9 +3,50 @@
 
 #include "nexuslab/sim/simulation.hpp"
 #include "nexuslab/transport/runtime.hpp"
+#include <limits>
 #include <stdexcept>
 
 namespace nexuslab::transport {
+std::uint64_t TransportRuntime::capacity_revision() const noexcept { return capacity_revision_; }
+void TransportRuntime::reserve_capacity(topology::LinkId link, BitsPerSecond minimum) {
+    if (!chunks_.empty() || minimum.value() == 0) {
+        throw std::invalid_argument{
+            "capacity reservation requires bootstrap and positive bandwidth"};
+    }
+    for (const auto direction : {topology::LinkDirection::AToB, topology::LinkDirection::BToA}) {
+        const topology::DirectedLinkId id{link, direction};
+        const auto current = require_service(id).queue().configuration().bandwidth;
+        if (minimum >= current) {
+            throw std::invalid_argument{"degraded capacity must be below both baselines"};
+        }
+    }
+    for (const auto direction : {topology::LinkDirection::AToB, topology::LinkDirection::BToA}) {
+        const topology::DirectedLinkId id{link, direction};
+        const auto found = minimum_bandwidth_.find(id);
+        if (found == minimum_bandwidth_.end() || minimum < found->second) {
+            minimum_bandwidth_.insert_or_assign(id, minimum);
+        }
+    }
+}
+void TransportRuntime::handle_capacity_change(const LinkCapacityChangeEvent& event,
+                                              sim::SimulationContext& /*context*/) {
+    auto& forward = require_service({event.link, topology::LinkDirection::AToB});
+    auto& reverse = require_service({event.link, topology::LinkDirection::BToA});
+    if (event.forward.value() == 0 || event.reverse.value() == 0) {
+        throw std::invalid_argument{"capacity must be positive"};
+    }
+    if (forward.queue().configuration().bandwidth == event.forward &&
+        reverse.queue().configuration().bandwidth == event.reverse) {
+        return;
+    }
+    if (capacity_revision_ == std::numeric_limits<std::uint64_t>::max()) {
+        throw std::overflow_error{"capacity revision exhausted"};
+    }
+    forward.set_bandwidth(event.forward);
+    reverse.set_bandwidth(event.reverse);
+    ++capacity_revision_;
+}
+
 namespace {
 void validate_state(topology::OperationalState state) {
     if (state != topology::OperationalState::Up && state != topology::OperationalState::Down) {
