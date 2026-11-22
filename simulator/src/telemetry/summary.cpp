@@ -18,6 +18,25 @@ namespace {
     return left + right;
 }
 
+void validate_perturbation(const Correlation& correlation,
+                           const TelemetryObservation& observation) {
+    if (const auto* failure = std::get_if<FailureObservation>(&observation);
+        failure != nullptr && failure->details.has_value()) {
+        if (failure->failure.value() == 0 || correlation.failure != failure->failure) {
+            throw std::invalid_argument{
+                "failure state requires a positive matching incident correlation"};
+        }
+    }
+    if (const auto* load = std::get_if<LoadObservation>(&observation)) {
+        if (load->source == 0 || correlation.traffic_source != load->source ||
+            load->ordinal >= load->count || load->bytes == 0 || load->chunk_bytes == 0 ||
+            load->kind < 1 || load->kind > 2 || load->outcome < 1 || load->outcome > 4 ||
+            (load->outcome != 1 && !load->finished.has_value())) {
+            throw std::invalid_argument{"invalid load state or correlation"};
+        }
+    }
+}
+
 void validate_metric_observation(const MetricRegistry& metrics,
                                  const TelemetryObservation& observation) {
     std::visit(
@@ -51,6 +70,25 @@ void apply_metric_observation(MetricRegistry& metrics, const TelemetryObservatio
 
 } // namespace
 
+std::optional<SummaryBuilder::PerturbationKey>
+SummaryBuilder::perturbation_key(const TelemetryObservation& observation) {
+    if (const auto* failure = std::get_if<FailureObservation>(&observation);
+        failure != nullptr && failure->details.has_value()) {
+        return PerturbationKey{TelemetryRecordKind::Failure, failure->failure.value(), 0};
+    }
+    if (const auto* load = std::get_if<LoadObservation>(&observation)) {
+        return PerturbationKey{TelemetryRecordKind::Load, load->source, load->ordinal};
+    }
+    return std::nullopt;
+}
+std::vector<PerturbationState> SummaryBuilder::perturbations() const {
+    std::vector<PerturbationState> result;
+    result.reserve(perturbations_.size());
+    for (const auto& [key, state] : perturbations_) {
+        result.push_back(state);
+    }
+    return result;
+}
 std::uint64_t JobAttributionSnapshot::accounted_ns() const {
     std::uint64_t result = checked_add(scheduling_wait_ns, compute_ns);
     result = checked_add(result, communication_ns);
@@ -71,6 +109,12 @@ void SummaryBuilder::validate(sim::SimTimeNs timestamp, const Correlation& corre
     }
     if (last_timestamp_.has_value() && timestamp < *last_timestamp_) {
         throw std::invalid_argument{"telemetry summary timestamp regressed"};
+    }
+    validate_perturbation(correlation, observation);
+    const auto key = perturbation_key(observation);
+    if (key.has_value() && !perturbations_.contains(*key) &&
+        perturbations_.size() >= maximum_metric_series_) {
+        throw std::length_error{"telemetry perturbation state limit exceeded"};
     }
     validate_metric_observation(metrics_, observation);
     const auto* const job_observation = std::get_if<JobObservation>(&observation);
@@ -95,6 +139,11 @@ void SummaryBuilder::consume(sim::SimTimeNs timestamp, const Correlation& correl
                              const TelemetryObservation& observation) {
     validate(timestamp, correlation, observation);
     apply_metric_observation(metrics_, observation);
+    const auto key = perturbation_key(observation);
+    if (key.has_value()) {
+        perturbations_.insert_or_assign(*key,
+                                        PerturbationState{timestamp, correlation, observation});
+    }
     if (const auto* const job_observation = std::get_if<JobObservation>(&observation)) {
         if (!correlation.job.has_value()) {
             throw std::logic_error{"validated job telemetry lost its correlation"};

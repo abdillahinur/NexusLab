@@ -91,6 +91,14 @@ std::string_view transition_name(telemetry::FailureTransition transition) {
         return "recovery_started";
     case telemetry::FailureTransition::Recovered:
         return "recovered";
+    case telemetry::FailureTransition::JobAffected:
+        return "job_affected";
+    case telemetry::FailureTransition::TrafficDropped:
+        return "traffic_dropped";
+    case telemetry::FailureTransition::AdmissionRejected:
+        return "admission_rejected";
+    case telemetry::FailureTransition::StateObserved:
+        return "state_observed";
     }
     throw std::invalid_argument{"invalid failure transition"};
 }
@@ -194,9 +202,9 @@ std::uint64_t script_digest(const Script& script, const topology::TopologyGraph&
 }
 Runtime::Runtime(const Script& script, topology::TopologyGraph& graph,
                  transport::TransportRuntime& transport, const collective::RingExecutor* ring,
-                 workload::WorkloadEngine* jobs, Limits limits)
-    : graph_{&graph}, transport_{&transport}, ring_{ring}, jobs_{jobs}, limits_{limits},
-      report_{script_digest(script, graph), {}, {}, {}},
+                 workload::WorkloadEngine* jobs, Limits limits, telemetry::TelemetrySink telemetry)
+    : telemetry_{telemetry}, graph_{&graph}, transport_{&transport}, ring_{ring}, jobs_{jobs},
+      limits_{limits}, report_{script_digest(script, graph), {}, {}, {}},
       calendar_{validate(script, graph, limits)} {
     for (std::size_t i = 0; i < script.incidents.size(); ++i) {
         const auto& incident = script.incidents[i];
@@ -268,6 +276,26 @@ void Runtime::transition(std::size_t index, telemetry::FailureTransition kind, s
     incident.capacity_revision = transport_->capacity_revision();
     report_.timeline.push_back(
         {incident.id, kind, now, incident.effective_operational, incident.capacity_revision});
+    auto correlation = action_correlation_;
+    correlation.failure = incident.id;
+    emit(index, kind, now, correlation);
+    emit_counter(index, telemetry::MetricId::FailureStateTransitionTotal, 1, now);
+    if (telemetry_.enabled() && kind == telemetry::FailureTransition::Detected) {
+        telemetry_.record(
+            now, correlation,
+            telemetry::HistogramObservation{
+                telemetry::MetricId::FailureDetectionTimeNs,
+                {{telemetry::MetricLabel::Resource, incident.specification.target.index() + 1}},
+                now.count() - incident.specification.onset.count()});
+    }
+    if (telemetry_.enabled() && kind == telemetry::FailureTransition::Recovered) {
+        telemetry_.record(
+            now, correlation,
+            telemetry::HistogramObservation{
+                telemetry::MetricId::FailureRecoveryTimeNs,
+                {{telemetry::MetricLabel::Resource, incident.specification.target.index() + 1}},
+                now.count() - incident.specification.onset.count()});
+    }
 }
 sim::EventPayload Runtime::event(const Action& action) const {
     const auto& incident = report_.incidents.at(action.incident).specification;
@@ -341,6 +369,8 @@ void Runtime::process(const sim::EventPayload& payload, sim::SimulationContext& 
     if (found == pending_.end()) {
         throw std::logic_error{"unregistered scripted failure action"};
     }
+    action_correlation_.event = context.current_event_id();
+    action_correlation_.cause = context.cause();
     const auto action = found->second;
     auto& incident = report_.incidents.at(action.incident);
     if (payload != event(action) || context.now() != action.timestamp) {
@@ -359,14 +389,16 @@ void Runtime::process(const sim::EventPayload& payload, sim::SimulationContext& 
             const auto owner =
                 jobs_->resource(std::get<topology::GpuId>(incident.specification.target)).owner;
             if (owner.has_value()) {
-                affect_job(action.incident, *owner);
+                affect_job(action.incident, *owner, context.now());
             }
         }
         apply(payload, context);
         transition(action.incident, telemetry::FailureTransition::Applied, context.now());
         transition(action.incident, telemetry::FailureTransition::Detected, context.now());
     }
+    refresh(context.now());
     pending_.erase(found);
+    action_correlation_ = {};
 }
 void Runtime::handle(const transport::LinkStateChangeEvent& event_value,
                      sim::SimulationContext& context) {
@@ -387,7 +419,7 @@ void Runtime::handle(const transport::LinkCapacityChangeEvent& event_value,
 void Runtime::handle(const workload::WorkloadEvent& event_value, sim::SimulationContext& context) {
     process(event_value, context);
 }
-void Runtime::affect_job(std::size_t index, workload::JobId job) {
+void Runtime::affect_job(std::size_t index, workload::JobId job, sim::SimTimeNs now) {
     auto& incident = report_.incidents.at(index);
     if (affected_.contains({incident.id, job})) {
         return;
@@ -397,6 +429,10 @@ void Runtime::affect_job(std::size_t index, workload::JobId job) {
     }
     incident.affected_jobs.push_back(job);
     affected_.emplace(incident.id, job);
+    auto correlation = action_correlation_;
+    correlation.job = job;
+    emit(index, telemetry::FailureTransition::JobAffected, now, correlation);
+    emit_counter(index, telemetry::MetricId::FailureAffectedJobs, 1, now);
 }
 std::size_t Runtime::blocking_incident(const topology::PhysicalLink& link) const {
     std::vector<ResourceKey> keys{
@@ -446,10 +482,19 @@ void Runtime::on_down_drop(const transport::DownDrop& drop) {
         }
     }
     if (job.has_value()) {
-        affect_job(selected, *job);
+        affect_job(selected, *job, drop.timestamp);
     }
     incident.dropped = transport::add_traffic(incident.dropped, {drop.bytes.value(), 1});
     report_.drops.push_back({incident.id, drop, job});
+    auto correlation = action_correlation_;
+    correlation.job = job;
+    correlation.transfer = drop.transfer;
+    correlation.chunk = drop.chunk;
+    correlation.link = drop.link;
+    emit(selected, telemetry::FailureTransition::TrafficDropped, drop.timestamp, correlation,
+         drop.bytes.value());
+    emit_counter(selected, telemetry::MetricId::FailureAffectedTrafficBytes, drop.bytes.value(),
+                 drop.timestamp);
 }
 Report Runtime::report() const {
     Report result = report_;

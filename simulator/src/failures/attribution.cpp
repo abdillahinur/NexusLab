@@ -67,7 +67,15 @@ void Runtime::attribute_no_route(const collective::NoRouteAdmission& admission) 
         }
     }
     if (selected != report_.incidents.size()) {
-        affect_job(selected, *job);
+        affect_job(selected, *job, admission.timestamp);
+        telemetry::Correlation correlation;
+        correlation.job = job;
+        correlation.collective = admission.collective;
+        correlation.flow = admission.flow;
+        correlation.event = admission.event;
+        correlation.cause = admission.cause;
+        emit(selected, telemetry::FailureTransition::AdmissionRejected, admission.timestamp,
+             correlation);
     }
 }
 } // namespace nexuslab::failures

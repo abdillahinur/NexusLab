@@ -94,11 +94,23 @@ void Router::emit_decision(const RouteDecision& decision, telemetry::RoutingDeci
     correlation.cause = context.cause();
     correlation.transfer = decision.transfer;
     correlation.routing_decision = id;
-    telemetry_.record(context.now(), correlation,
-                      telemetry::RoutingDecisionObservation{
-                          id, decision.policy, decision.version, decision.operational_revision,
-                          decision.candidates, decision.path, decision.score, decision.reason,
-                          decision.transfer, outcome});
+    if (configuration_.capacity_metadata) {
+        correlation.flow = decision.request.flow;
+    }
+    telemetry_.record(
+        context.now(), correlation,
+        telemetry::RoutingDecisionObservation{
+            id, decision.policy, decision.version, decision.operational_revision,
+            decision.candidates, decision.path, decision.score, decision.reason, decision.transfer,
+            outcome,
+            configuration_.capacity_metadata ? std::optional{decision.capacity_revision}
+                                             : std::nullopt,
+            configuration_.capacity_metadata
+                ? std::optional{telemetry::RoutingRequestDetails{
+                      decision.request.flow, decision.request.endpoints.source,
+                      decision.request.endpoints.destination, decision.request.bytes.value(),
+                      decision.request.maximum_chunk_bytes.value()}}
+                : std::nullopt});
     telemetry_.record(
         context.now(), correlation,
         telemetry::CounterObservation{

@@ -26,13 +26,15 @@ snapshots. Typed capacity event kind 9 fits the unchanged 72-byte event envelope
 targets and resource keys preserve overlap semantics; restoration never overrides another down cause.
 
 The [implementation plan](docs/design/failure-injection.md) distinguishes these slices from pending
-catalog-v2 reconstruction/export. No-route collective admissions now contribute an affected-job
+controlled comparisons and Gate 9 evidence. No-route collective admissions now contribute an affected-job
 pair to the lowest active down incident on any healthy minimum-hop fabric candidate, without
 creating transfer/drop facts. Structural BFS avoids routing candidate truncation. Bounded burst/checkpoint sources
 share routing/transport queues with training, use separate completion ownership, and retain exact
 request outcomes independently of telemetry. Load scripts use outcome digest v4; typed injection
-event kind 10 preserves the existing event envelope and prior kinds. Scripted CLI JSON
-export remains rejected. Clusters 0–8 remain gate-approved; Cluster 9 and Gate 9 remain open.
+event kind 10 preserves the existing event envelope and prior kinds. Catalog-v2 CLI JSON/JSONL
+export now includes lifecycle metrics, bounded incident/request state, capacity and correlation
+provenance, domain outcomes and observation completeness. Typed full-trace replay reconstructs
+canonical summaries; catalog-v1 output remains byte-compatible. Clusters 0–8 remain gate-approved; Cluster 9 and Gate 9 remain open.
 
 ## System boundary
 

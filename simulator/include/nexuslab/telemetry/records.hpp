@@ -11,6 +11,7 @@
 #include "nexuslab/transport/types.hpp"
 #include "nexuslab/workload/events.hpp"
 
+#include <array>
 #include <compare>
 #include <cstdint>
 #include <optional>
@@ -46,6 +47,8 @@ struct Correlation final {
     std::optional<RoutingDecisionId> routing_decision;
     std::optional<PlacementDecisionId> placement_decision;
     std::optional<FailureId> failure;
+    std::optional<std::uint64_t> traffic_source{std::nullopt};
+    std::optional<std::uint64_t> flow{std::nullopt};
 
     bool operator==(const Correlation&) const = default;
 };
@@ -191,6 +194,14 @@ enum class RoutingDecisionOutcome : std::uint8_t {
     Rejected = 3,
 };
 
+struct RoutingRequestDetails final {
+    std::uint64_t flow;
+    topology::NodeId source;
+    topology::NodeId destination;
+    std::uint64_t bytes;
+    std::uint64_t chunk_bytes;
+    bool operator==(const RoutingRequestDetails&) const = default;
+};
 struct RoutingDecisionObservation final {
     RoutingDecisionId decision;
     std::string policy;
@@ -202,6 +213,8 @@ struct RoutingDecisionObservation final {
     std::string reason;
     std::optional<transport::TransferId> transfer;
     RoutingDecisionOutcome outcome;
+    std::optional<std::uint64_t> capacity_revision{std::nullopt};
+    std::optional<RoutingRequestDetails> request{std::nullopt};
 
     bool operator==(const RoutingDecisionObservation&) const = default;
 };
@@ -234,6 +247,10 @@ enum class FailureTransition : std::uint8_t {
     Applied = 3,
     RecoveryStarted = 4,
     Recovered = 5,
+    JobAffected = 6,
+    TrafficDropped = 7,
+    AdmissionRejected = 8,
+    StateObserved = 9,
 };
 
 enum class FailureResourceKind : std::uint8_t {
@@ -244,20 +261,62 @@ enum class FailureResourceKind : std::uint8_t {
     Nic = 5,
 };
 
+struct FailureDetails final {
+    std::uint64_t kind;
+    sim::SimTimeNs onset;
+    std::optional<sim::SimTimeNs> recovery;
+    std::optional<std::uint64_t> bandwidth_bps;
+    bool applied;
+    bool recovered;
+    bool effective_operational;
+    std::uint64_t capacity_revision;
+    std::uint64_t affected_jobs;
+    std::uint64_t dropped_bytes;
+    std::uint64_t dropped_chunks;
+    std::optional<std::array<std::uint64_t, 2>> baseline_capacity_bps{std::nullopt};
+    std::optional<std::array<std::uint64_t, 2>> effective_capacity_bps{std::nullopt};
+    bool operator==(const FailureDetails&) const = default;
+};
 struct FailureObservation final {
     FailureId failure;
     FailureTransition transition;
     FailureResourceKind resource_kind;
     std::uint64_t resource_id;
     std::uint64_t affected_bytes;
+    std::optional<FailureDetails> details{std::nullopt};
 
     bool operator==(const FailureObservation&) const = default;
 };
 
+// A complete value snapshot at each load request transition; source IDs are a separate namespace.
+struct LoadObservation final {
+    std::uint64_t source;
+    std::uint64_t ordinal;
+    std::uint64_t kind;
+    topology::GpuId source_gpu;
+    topology::GpuId destination_gpu;
+    sim::SimTimeNs scheduled;
+    std::uint64_t count;
+    std::uint64_t interval_ns;
+    std::uint64_t bytes;
+    std::uint64_t chunk_bytes;
+    std::optional<sim::SimTimeNs> injected;
+    std::optional<sim::SimTimeNs> finished;
+    std::optional<transport::TransferId> transfer;
+    std::uint64_t outcome;
+    transport::ByteCount delivered;
+    transport::ByteCount buffer_dropped;
+    transport::ByteCount down_dropped;
+    std::uint64_t delivered_chunks;
+    std::uint64_t buffer_dropped_chunks;
+    std::uint64_t down_dropped_chunks;
+    bool operator==(const LoadObservation&) const = default;
+};
 using TelemetryObservation =
     std::variant<CounterObservation, GaugeObservation, HistogramObservation, SimulationObservation,
                  JobObservation, CollectiveObservation, TransferObservation, QueueObservation,
-                 RoutingDecisionObservation, PlacementDecisionObservation, FailureObservation>;
+                 RoutingDecisionObservation, PlacementDecisionObservation, FailureObservation,
+                 LoadObservation>;
 
 enum class TelemetryRecordKind : std::uint8_t {
     Counter = 1,
@@ -269,6 +328,7 @@ enum class TelemetryRecordKind : std::uint8_t {
     Transfer = 13,
     Queue = 14,
     Failure = 15,
+    Load = 16,
     RoutingDecision = 20,
     PlacementDecision = 21,
 };

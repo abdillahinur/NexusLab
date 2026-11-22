@@ -233,10 +233,11 @@ digest v2, resource/capacity kinds use v3, and nonempty loads use v4. Callers
 use resolved_domain_outcome_digest_version(report) with domain_outcome_digest(report). Without a
 script, legacy output and digest version 1 are preserved.
 
-Scripted --telemetry-summary-json and --telemetry-records-jsonl output is rejected until catalog
-version 2 can represent the complete failure evidence. Existing telemetry modes still observe the
-previous domain metrics, but do not yet export incident lifecycle state. Use --timeline for this
-slice. See [ADR-019](adr/ADR-019-deterministic-failure-lifecycle.md) and
+Scripted --telemetry-summary-json and --telemetry-records-jsonl output now uses catalog version 2.
+Enabled modes retain latest incident/request state; full mode additionally retains the complete
+typed record stream. Exported domain_success remains false for failed/unfinished jobs or loads,
+even if the simulation queue completed. Set telemetry.mode to full for a reconstructible trace;
+off/summary/sampled exports explicitly mark records_complete false. See [ADR-019](adr/ADR-019-deterministic-failure-lifecycle.md) and
 [the remaining acceptance plan](design/failure-injection.md).
 
 ## Resource recovery and degraded capacity
@@ -271,7 +272,7 @@ build/release/simulator/nexuslab train --file examples/training/link-degradation
 
 Use the build executable under NEXUSLAB_BUILD_ROOT when set. The examples are synthetic and do not
 model hardware fault detection or checkpoint restoration. Capacity/incident state is available in
-domain reports; complete catalog-v2 telemetry and scripted JSON/JSONL export remain pending.
+domain reports and catalog-v2 telemetry; scripted JSON/JSONL export is available.
 
 ### Background burst and checkpoint loads
 
@@ -307,4 +308,5 @@ blocks an arc on any healthy-topology minimum-hop fabric path. Declaration ID wi
 order. Recovered incidents, degradation and failures only on longer paths do not qualify. This
 rule is independent of the selected routing policy and candidate enumeration limits, and does not
 claim a single incident was the sole cause. The normal affected-job pair limit still applies.
-Catalog-v2 export/reconstruction remains pending; use the domain report and human timeline.
+Catalog-v2 export and typed full-trace summary reconstruction retain these outcomes alongside
+the domain report and human timeline.

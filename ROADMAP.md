@@ -38,9 +38,9 @@ and Cluster 15 static policy SDK are dependencies of Cluster 24; deeper attribut
 
 Cluster 9 has an [accepted failure contract](docs/adr/ADR-019-deterministic-failure-lifecycle.md)
 and [implementation/acceptance plan](docs/design/failure-injection.md). Link/resource/capacity scripts,
-bounded background loads and no-route job attribution are implemented. Complete telemetry and
-Gate 9 are pending. By cluster count, 9 of 25 clusters are gate-approved (36%); this is not an
-effort-weighted completion estimate.
+bounded background loads, no-route job attribution and catalog-v2 telemetry/export/reconstruction
+are implemented. Controlled comparisons, overhead characterization and Gate 9 are pending. By
+cluster count, 9 of 25 clusters are gate-approved (36%); this is not an effort-weighted estimate.
 
 ## Scientific delivery order
 

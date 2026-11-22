@@ -72,8 +72,10 @@ Cluster 8's design is documented in
 detection, transport drops, alternative routing for later admissions and restoration. Resource
 recovery and degradation examples are also available. The [background-load example](examples/training/background-loads.yaml)
 adds bounded burst/checkpoint traffic with separate outcomes and shared-queue contention.
-No-route admissions now attribute affected training jobs without fabricated drops. Complete failure
-telemetry remains Cluster 9 work; see the
+No-route admissions now attribute affected training jobs without fabricated drops. Catalog-v2
+failure/load telemetry and JSON/JSONL export are available, with typed full-trace
+summary reconstruction and unchanged legacy catalog-v1 bytes. Controlled comparisons and Gate 9
+evidence remain Cluster 9 work; see the
 [implementation status](docs/design/failure-injection.md).
 
 ## Explicit boundaries

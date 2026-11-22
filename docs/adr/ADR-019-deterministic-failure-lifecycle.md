@@ -12,8 +12,9 @@ it does not record complete implementation or Gate 9 approval. ADR-012 through A
 numbers. The [execution plan](../design/failure-injection.md) defines the implementation slices and
 acceptance evidence. The master plan's complete Cluster 9 scope remains required.
 Link/port/switch/GPU incidents, capacity degradation and bounded background loads are implemented.
-No-route job attribution is implemented; catalog-v2 serialization remains pending. Until catalog v2, CLI JSON/JSONL export of scripted runs is rejected
-explicitly; domain reports and human timelines are the supported failure evidence.
+No-route job attribution and catalog-v2 serialization/reconstruction are implemented. Scripted
+JSON/JSONL export is enabled with explicit domain outcomes and observation completeness. Controlled
+policy comparisons, overhead evidence and Gate 9 approval remain pending.
 
 ## Context
 
@@ -200,8 +201,8 @@ capacity degradation and GPU health do not qualify as fabric down causes. Recove
 unrelated/nonminimum-path failures and already terminal/unowned jobs add no affected-job pair.
 The existing affected-job bound applies, and exhaustion fails the simulation explicitly. No new
 transfer, dropped bytes or dropped chunks are fabricated. Background requests retain their own
-no-route outcomes without becoming jobs; per-admission incident provenance in exported records
-remains part of the pending catalog-v2 work.
+no-route outcomes without becoming jobs. Catalog-v2 admission facts join the actual routing
+decision, collective and job through flow/event correlations; background sources retain a separate namespace.
 
 This completes an existing affected-job field's semantics. No digest field or encoding changes:
 v1/v2/v3/v4 layouts and script goldens remain fixed; newly attributed runs correctly hash the
@@ -318,5 +319,23 @@ script goldens remain unchanged. Runs with new resource kinds use domain outcome
 which adds global, routing, incident and timeline capacity revisions; legacy no-script runs retain
 version 1 and link-only scripts retain version 2. Use resolved_domain_outcome_digest_version(report).
 Future fields need another explicit version decision; version 3 must not be silently extended.
-Catalog-v2 failure telemetry/export remains pending and scripted CLI JSON/JSONL remains rejected.
+Catalog-v2 failure telemetry/export and typed full-trace summary reconstruction are implemented;
+legacy catalog-v1 bytes remain unchanged.
 This refinement does not approve Gate 9 or introduce retries, background traffic or real actuation.
+
+### Catalog-v2 implementation refinement — 2026-11-22
+
+Scripted composition passes the observational sink into the failure and load owners. Lifecycle
+transitions activate metrics 100–104 with the exact semantics above. Non-lifecycle facts use
+additional transition codes JobAffected 6, TrafficDropped 7, AdmissionRejected 8 and StateObserved
+9; none increments the lifecycle counter or domain timeline. StateObserved refreshes effective
+health/capacity after another resource restores, preventing stale incident summaries.
+
+Failure records carry additive specification/state/capacity fields; load record kind 16 carries
+complete request snapshots, including pending and negative outcomes. Routing records add request
+and capacity provenance only for scripted composition. Event priorities, payload kinds, domain
+scheduling and digest layouts are unchanged. Catalog-v1 fixtures and record bytes remain frozen.
+See the [catalog-v2 dictionary](../design/telemetry.md#catalog-v2-scripted-perturbations) for exact
+field/correlation codes, completeness semantics and retention bounds. Reconstruction replays
+finalized in-memory full records with explicit catalog selection; JSONL parsing/import is not
+introduced here. Final comparisons, overhead characterization and Gate 9 remain separate work.

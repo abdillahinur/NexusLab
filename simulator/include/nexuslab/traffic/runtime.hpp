@@ -9,7 +9,7 @@ namespace nexuslab::traffic {
 class Runtime final {
   public:
     Runtime(std::vector<Source> sources, const topology::TopologyGraph& graph,
-            routing::Router& router, Limits limits = {});
+            routing::Router& router, Limits limits = {}, telemetry::TelemetrySink telemetry = {});
     void schedule(sim::Simulation& simulation);
     void handle(const InjectionEvent& event, sim::SimulationContext& context);
     void handle(const transport::TransferCompletion& completion);
@@ -17,6 +17,8 @@ class Runtime final {
     [[nodiscard]] const std::vector<Request>& report() const noexcept;
 
   private:
+    void emit(const Request& request, sim::SimTimeNs now, telemetry::Correlation correlation = {});
+    telemetry::TelemetrySink telemetry_;
     std::vector<Source> sources_;
     const topology::TopologyGraph* graph_;
     routing::Router* router_;

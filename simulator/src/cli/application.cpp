@@ -9,6 +9,7 @@
 #include "nexuslab/topology/graph.hpp"
 #include "nexuslab/topology/summary.hpp"
 #include "nexuslab/version.hpp"
+#include "nexuslab/workload/digest.hpp"
 #include "nexuslab/workload/run.hpp"
 
 #include <algorithm>
@@ -118,6 +119,19 @@ telemetry_metadata(const workload::TrainingScenario& scenario,
     metadata.outcome = telemetry_outcome(report.simulation.status);
     metadata.final_time = report.simulation.final_time;
     metadata.complete = report.simulation.status == sim::SimulationStatus::Completed;
+    if (report.failures.has_value()) {
+        const bool jobs_succeeded =
+            std::all_of(report.jobs.begin(), report.jobs.end(),
+                        [](const auto& job) { return job.state == workload::JobState::Succeeded; });
+        const bool loads_succeeded =
+            std::all_of(report.loads.begin(), report.loads.end(), [](const auto& load) {
+                return load.outcome == traffic::Outcome::Succeeded;
+            });
+        metadata.script = telemetry::ScriptMetadata{
+            report.failures->script_digest, workload::domain_outcome_digest(report),
+            workload::resolved_domain_outcome_digest_version(report),
+            report.failures->capacity_revision, jobs_succeeded && loads_succeeded};
+    }
     return metadata;
 }
 
@@ -138,11 +152,6 @@ struct CommandStreams final {
 
     const auto yaml = read_training_file(arguments[2]);
     const auto scenario = workload::parse_scenario(yaml);
-    if (scenario.failure_script.has_value() && arguments.size() == 4U &&
-        arguments[3] != "--timeline") {
-        throw std::invalid_argument{
-            "failure-script telemetry JSON export awaits catalog version 2; use --timeline"};
-    }
     const auto report = workload::run_training(scenario);
     if (arguments.size() == 4U && arguments[3] == "--telemetry-summary-json") {
         streams.output << telemetry::serialize_summary_json(

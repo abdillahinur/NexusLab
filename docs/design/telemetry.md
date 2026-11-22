@@ -6,7 +6,7 @@ SPDX-License-Identifier: Apache-2.0
 # Telemetry design and metric catalog
 
 Status: Cluster 8 complete; Architecture Gate 8 approved on 2026-09-10. The logical telemetry
-schema and metric catalog are both version 1. [ADR-011](../adr/ADR-011-telemetry-observability-boundary.md)
+schema remains version 1. Legacy runs use metric catalog 1; scripted runs now use catalog 2. [ADR-011](../adr/ADR-011-telemetry-observability-boundary.md)
 owns the architectural decision; this document is the operator-facing contract.
 
 ## Observation boundary
@@ -32,7 +32,7 @@ simulation event IDs, and an equal-time boundary is emitted only after that time
 
 Canonical summary JSON uses schema `nexuslab.telemetry.summary`; JSON Lines uses
 `nexuslab.telemetry.records`. Both currently require `schema_version: 1` and embed
-`catalog_version: 1`. Output is UTF-8 with fixed key order, decimal integers, defined escaping, no
+`catalog_version: 1` for legacy runs or `2` for scripted runs. Output is UTF-8 with fixed key order, decimal integers, defined escaping, no
 insignificant whitespace, and a final newline. Unknown major schema versions are rejected.
 
 Both forms identify the simulator version, synthetic-data status, seed, scenario digest, routing
@@ -162,3 +162,67 @@ The [training scenario guide](../training-scenarios.md) documents configuration 
 The [Cluster 8 baseline](../benchmarks/cluster-8-telemetry-baseline.md) records measured overhead.
 The [Gate 8 record](../architecture-gates/cluster-8.md) maps the implementation and validation to
 the acceptance criteria.
+
+## Catalog-v2 scripted perturbations
+
+Schema version 1 is retained. Scripted CLI exports select catalog 2; legacy runs select catalog 1
+and retain their original canonical summary/JSONL bytes. require_supported_catalog_version accepts
+1 and 2 and rejects other values. Reserved metric IDs, units and label masks remain unchanged;
+catalog 2 activates their accepted failure semantics. Domain outcome digest layouts v1–v4 are
+unchanged. Their checksums exclude observation mode and retained telemetry.
+
+| Metric ID | Meaning | Labels |
+|---|---|---|
+| 100 failure_state_transition_total | One increment for each Scheduled, Applied, Detected, RecoveryStarted or Recovered transition | Failure ID and Resource kind |
+| 101 failure_affected_jobs_total | One increment per distinct incident/job pair, including no-route admissions and GPU aborts | Failure ID; Resource kind included |
+| 102 failure_affected_traffic_bytes_total | Uniquely attributed down-dropped logical bytes; excludes buffer-full drops, no-route admissions and slower traffic | Failure ID; Resource kind included |
+| 103 failure_detection_time_ns | One zero-latency sample for each immediate detector application | Resource kind |
+| 104 failure_recovery_time_ns | Configured onset-to-restoration duration; no sample for pending/permanent incidents | Resource kind |
+
+Resource label codes are Link 1, Port 2, Switch 3 and Gpu 4. Individual resource IDs remain in typed
+records. Missing recovery is represented as missing, not a zero sample. Recovered resource state
+may remain effectively unavailable under another active cause; restoration never restarts jobs.
+
+Existing Failure record kind 15 keeps transition codes Scheduled 1, Detected 2, Applied 3,
+RecoveryStarted 4 and Recovered 5. New fact codes are JobAffected 6, TrafficDropped 7,
+AdmissionRejected 8 and StateObserved 9. Facts do not increment metric 100. StateObserved refreshes
+an incident's effective health/capacity when another cause changes it. Failure records add:
+incident_kind (down 1, degraded 2, port 3, switch 4, GPU 5), onset_ns, optional recover_at_ns and
+bandwidth_bps, applied/recovered/effective_operational, capacity_revision, cumulative affected_jobs,
+dropped_bytes and dropped_chunks. Link incidents include baseline_capacity_bps and
+effective_capacity_bps arrays ordered A-to-B then B-to-A; non-link incidents use null. Existing
+fields and numeric values remain unchanged; absent additive fields retain the legacy encoding.
+
+Load record kind 16 carries full per-request snapshots: separate traffic_source ID, zero-based
+request ordinal, load_kind (burst 1/checkpoint 2), endpoint GPUs, scheduled time, count, interval,
+bytes/chunk sizes, optional injection/completion times and transfer ID, outcome (Pending 1,
+Succeeded 2, Failed 3, NoRoute 4), and delivered/buffer-drop/down-drop byte/chunk counts. Bootstrap
+snapshots describe pending requests. NoRoute has no transfer or fabricated drops. Checkpoint is
+traffic provenance, not storage/checkpoint consistency or restart semantics.
+
+Correlations add optional traffic_source and flow fields. Incident and source IDs use separate
+namespaces even when their numeric values coincide. Scripted routing records include request
+flow/endpoints/bytes/chunk size and capacity_revision. AdmissionRejected facts join the actual
+routing event/flow, collective and job. Background requests never create affected training jobs.
+Existing transfer/chunk/link correlations connect unique failure drops to transport facts.
+
+Summary JSON adds perturbations: latest snapshots sorted by record kind, source/incident ID and
+request ordinal. Every enabled mode builds this view through the same SummaryBuilder. It is
+bounded independently by limits.metric_series, in addition to metric-series limits; exhaustion
+fails explicitly. Full record, decision, correlation-edge, sample and serialized-byte limits still
+apply separately. No truncation or sampling is substituted for a complete full trace.
+
+Scripted metadata adds failure_script_digest_fnv1a64, domain_outcome_digest_fnv1a64 and its version,
+capacity_revision and domain_success. The latter is false for any failed, waiting or pending
+job/load and is distinct from terminal.status (simulation queue outcome). domain_observations_complete
+is false in off mode. records_complete is true only for a completed full-mode simulation; it is
+false for off/summary/sampled and stopped runs. A failed job may coexist with a completed full
+record stream; its domain_success remains false. The existing JSONL footer digest still hashes
+all preceding header/record/sample bytes and excludes the footer itself.
+
+reconstruct_full_trace(snapshot, metadata, catalog_version) replays finalized in-memory full
+records, requires matching supported catalog provenance, validates contiguous IDs and timestamp
+bounds, and rebuilds metric series, job attributions and perturbation snapshots. It does not reuse
+cached summary values. Legacy and scripted canonical summaries reconstruct byte-for-byte.
+Stopped full traces can be replayed as the observed stopped run, preserving pending state; they
+are not labeled as complete experiments. JSONL parsing/import is a separate future boundary.

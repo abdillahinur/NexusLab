@@ -123,7 +123,10 @@ void RingExecutor::issue(Record& record, const RingTransfer& transfer,
             no_route_admissions_.push_back(
                 {record.result.id,
                  {topology::NodeId{source}, topology::NodeId{destination}},
-                 context.now()});
+                 context.now(),
+                 next_flow_ - 1,
+                 context.current_event_id(),
+                 context.cause()});
             record.failed = true;
             record.result.reason = "no route for collective round";
             return;

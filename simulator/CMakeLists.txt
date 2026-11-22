@@ -5,6 +5,7 @@ add_library(
     nexuslab_core STATIC
     src/failures/runtime.cpp
     src/failures/attribution.cpp
+    src/failures/telemetry.cpp
     src/traffic/runtime.cpp
     src/sim/deterministic_rng.cpp
     src/sim/event_id.cpp
@@ -15,6 +16,7 @@ add_library(
     src/telemetry/records.cpp
     src/telemetry/samples.cpp
     src/telemetry/serialization.cpp
+    src/telemetry/reconstruction.cpp
     src/telemetry/summary.cpp
     src/telemetry/session.cpp
     src/transport/link_queue.cpp
@@ -83,6 +85,7 @@ if(NEXUSLAB_BUILD_TESTS AND BUILD_TESTING)
         tests/telemetry_sampling_test.cpp
         tests/telemetry_serialization_test.cpp
         tests/telemetry_validation_test.cpp
+        tests/telemetry_failure_test.cpp
         tests/telemetry_summary_test.cpp
         tests/telemetry_session_test.cpp
         tests/telemetry_integration_test.cpp

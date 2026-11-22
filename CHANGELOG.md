@@ -11,17 +11,25 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
 
 ### Added
 
+- Catalog-v2 scripted failure/load telemetry, activated lifecycle/affected-job/unique-drop/latency
+  metrics, bounded latest-state summaries, effective-health refreshes and capacity provenance.
+- Scripted JSON/JSONL export with domain outcome and completeness metadata, request/source
+  snapshots, no-route flow/event correlation, and explicit catalog-aware typed full-trace replay.
+  Legacy catalog-v1 export goldens and domain digest layouts remain unchanged.
+- Reconstruction, pending/permanent/negative outcome, limit, version, correlation and canonical
+  record regression checks. Controlled comparisons, overhead characterization and Gate 9 remain open.
+
 - Deterministic no-route training-job attribution to the lowest active down incident on a healthy
   minimum-hop fabric candidate, without fabricated transfers or dropped bytes. Bounded admission
   handoff preserves ownership until composition resolves it; structural BFS avoids route truncation.
 - No-route recovery/overlap/bound/mode tests and an executable admission-failure scenario.
-  Existing digest layouts remain unchanged; catalog-v2 telemetry/export and Gate 9 remain open.
+  Existing digest layouts remain unchanged; controlled comparisons and Gate 9 remain open.
 
 - Bounded burst/checkpoint background sources sharing routing/transport with training, separate
   completion ownership, explicit pending/success/no-route/drop outcomes, checked injection bounds,
   and nonzero CLI status for failed loads. Typed injection event kind 10 retains prior event kinds.
 - Outcome digest v4 for load scripts, canonical load script golden, timing/accounting/contention
-  tests and successful/loss examples. Catalog-v2 telemetry and Gate 9 remain open.
+  tests and successful/loss examples. Controlled comparisons and Gate 9 remain open.
 
 - Cluster 9 scripted port/switch/GPU failures and link-capacity degradation, strong typed targets,
   cross-resource recovery/attribution, scheduler health ownership and conflicting-control rejection.
@@ -34,8 +42,8 @@ All notable changes to NexusLab will be documented here. The format follows [Kee
   immediate detection, domain lifecycle/drop/job attribution and canonical script/digest versions.
 - A runnable 512-GPU spine-link failure/restoration scenario, later-job rerouting, analytical loss
   and propagation tests, strict unsupported-feature rejection, and legacy-output compatibility.
-- Explicit rejection of scripted CLI telemetry JSON/JSONL export until catalog-v2 failure support;
-  complete failure telemetry and Gate 9 remain pending.
+- Initial rejection of scripted CLI telemetry JSON/JSONL export was lifted by catalog-v2 support;
+  controlled comparisons and Gate 9 remain pending.
 
 - Accepted Cluster 8's deterministic telemetry architecture: per-run collection modes, typed
   correlation, versioned metrics, non-perturbing samples, bounded retention, and canonical JSON

@@ -79,8 +79,8 @@ std::vector<Request> validate(const std::vector<Source>& sources,
     return requests;
 }
 Runtime::Runtime(std::vector<Source> sources, const topology::TopologyGraph& graph,
-                 routing::Router& router, Limits limits)
-    : sources_{std::move(sources)}, graph_{&graph}, router_{&router},
+                 routing::Router& router, Limits limits, telemetry::TelemetrySink telemetry)
+    : telemetry_{telemetry}, sources_{std::move(sources)}, graph_{&graph}, router_{&router},
       requests_{validate(sources_, graph, limits)} {
     for (const auto& source : sources_) {
         router_->preflight(
@@ -97,6 +97,9 @@ void Runtime::schedule(sim::Simulation& simulation) {
         throw std::logic_error{"background loads already scheduled"};
     }
     scheduled_ = true;
+    for (const auto& request : requests_) {
+        emit(request, sim::SimTimeNs{0});
+    }
     std::vector<std::size_t> order(requests_.size());
     std::iota(order.begin(), order.end(), 0);
     std::sort(order.begin(), order.end(), [&](std::size_t a, std::size_t b) {
@@ -119,6 +122,10 @@ void Runtime::handle(const InjectionEvent& event, sim::SimulationContext& contex
     auto& request = requests_.at(found->second);
     const auto& source = sources_.at(static_cast<std::size_t>(request.source.value() - 1));
     request.injected = context.now();
+    telemetry::Correlation correlation;
+    correlation.event = context.current_event_id();
+    correlation.cause = context.cause();
+    emit(request, context.now(), correlation);
     // The upper half of the flow-key space is reserved for background requests.
     const auto submitted =
         router_->submit({(std::uint64_t{1} << 63U) | event.request,
@@ -131,9 +138,11 @@ void Runtime::handle(const InjectionEvent& event, sim::SimulationContext& contex
     if (!submitted.has_value()) {
         request.outcome = Outcome::NoRoute;
         request.finished = context.now();
+        emit(request, context.now(), correlation);
         return;
     }
     request.transfer = submitted->id;
+    emit(request, context.now(), correlation);
     pending_.emplace(submitted->id, static_cast<std::size_t>(event.request));
 }
 void Runtime::handle(const transport::TransferCompletion& completion) {
@@ -149,7 +158,38 @@ void Runtime::handle(const transport::TransferCompletion& completion) {
     request.delivered = completion.delivered;
     request.dropped_buffer_full = completion.dropped_buffer_full;
     request.dropped_link_down = completion.dropped_link_down;
+    emit(request, completion.timestamp);
     pending_.erase(found);
+}
+void Runtime::emit(const Request& request, sim::SimTimeNs now, telemetry::Correlation correlation) {
+    if (!telemetry_.enabled()) {
+        return;
+    }
+    const auto& source = sources_.at(static_cast<std::size_t>(request.source.value() - 1));
+    correlation.traffic_source = request.source.value();
+    correlation.transfer = request.transfer;
+    telemetry_.record(
+        now, correlation,
+        telemetry::LoadObservation{request.source.value(),
+                                   request.ordinal,
+                                   static_cast<std::uint64_t>(source.kind),
+                                   source.source,
+                                   source.destination,
+                                   request.scheduled,
+                                   source.count,
+                                   source.interval.count(),
+                                   source.bytes.value(),
+                                   source.chunk_bytes.value(),
+                                   request.injected,
+                                   request.finished,
+                                   request.transfer,
+                                   static_cast<std::uint64_t>(request.outcome),
+                                   transport::ByteCount{request.delivered.bytes},
+                                   transport::ByteCount{request.dropped_buffer_full.bytes},
+                                   transport::ByteCount{request.dropped_link_down.bytes},
+                                   request.delivered.chunks,
+                                   request.dropped_buffer_full.chunks,
+                                   request.dropped_link_down.chunks});
 }
 bool Runtime::owns(transport::TransferId transfer) const { return pending_.contains(transfer); }
 const std::vector<Request>& Runtime::report() const noexcept { return requests_; }

@@ -269,7 +269,9 @@ TelemetrySnapshot TelemetrySession::snapshot() const {
                              {records().begin(), records().end()},
                              {samples().begin(), samples().end()},
                              retained_correlation_edges(),
-                             finalized()};
+                             finalized(),
+                             enabled() ? implementation_->summary->perturbations()
+                                       : std::vector<PerturbationState>{}};
 }
 
 } // namespace nexuslab::telemetry

@@ -108,7 +108,8 @@ class Runtime final : private transport::DownDropObserver {
   public:
     Runtime(const Script& script, topology::TopologyGraph& graph,
             transport::TransportRuntime& transport, const collective::RingExecutor* ring = nullptr,
-            workload::WorkloadEngine* jobs = nullptr, Limits limits = {});
+            workload::WorkloadEngine* jobs = nullptr, Limits limits = {},
+            telemetry::TelemetrySink telemetry = {});
     ~Runtime() override;
     Runtime(const Runtime&) = delete;
     Runtime& operator=(const Runtime&) = delete;
@@ -132,7 +133,14 @@ class Runtime final : private transport::DownDropObserver {
     [[nodiscard]] sim::EventPayload event(const Action& action) const;
     void apply(const sim::EventPayload& payload, sim::SimulationContext& context);
     void process(const sim::EventPayload& payload, sim::SimulationContext& context);
-    void affect_job(std::size_t index, workload::JobId job);
+    void affect_job(std::size_t index, workload::JobId job, sim::SimTimeNs now);
+    void emit(std::size_t index, telemetry::FailureTransition kind, sim::SimTimeNs now,
+              telemetry::Correlation correlation = {}, std::uint64_t bytes = 0);
+    void refresh(sim::SimTimeNs now);
+    void emit_counter(std::size_t index, telemetry::MetricId metric, std::uint64_t amount,
+                      sim::SimTimeNs now);
+    telemetry::TelemetrySink telemetry_;
+    telemetry::Correlation action_correlation_;
     [[nodiscard]] std::size_t blocking_incident(const topology::PhysicalLink& link) const;
     void transition(std::size_t index, telemetry::FailureTransition kind, sim::SimTimeNs now);
     topology::TopologyGraph* graph_;

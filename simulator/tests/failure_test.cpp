@@ -359,7 +359,7 @@ TEST(FailureTest, AttributionExhaustionIsAnExplicitRunFailure) {
     different(required(result.error).find("attributed-chunk limit"), std::string::npos);
     equal(failures.report().drops.size(), 1U);
 }
-TEST(FailureTest, CheckedInSpineDemoRunsAndIncompleteJsonExportIsRejected) {
+TEST(FailureTest, CheckedInSpineDemoRunsAndCatalogV2ExportPreservesFailure) {
     const auto path = (std::filesystem::path{__FILE__}.parent_path().parent_path().parent_path() /
                        "examples/training/spine-link-failure.yaml")
                           .string();
@@ -374,8 +374,10 @@ TEST(FailureTest, CheckedInSpineDemoRunsAndIncompleteJsonExportIsRejected) {
     different(output.str().find("transition=recovered time_ns=30000"), std::string::npos);
     const std::array<std::string_view, 4> json_arguments{"train", "--file", path,
                                                          "--telemetry-summary-json"};
-    expect_throw<std::invalid_argument>(
-        [&] { static_cast<void>(cli::run(json_arguments, output, error)); });
+    output.str("");
+    equal(cli::run(json_arguments, output, error), 1);
+    different(output.str().find("\"catalog_version\":2"), std::string::npos);
+    different(output.str().find("\"domain_success\":false"), std::string::npos);
 }
 TEST(FailureTest, StrictParsingRejectsFutureFeaturesAndDuplicateKeys) {
     const std::string prefix = "version: 1\njobs: [{workers: [0, 8]}]\nfailure_script: ";

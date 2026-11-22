@@ -23,6 +23,7 @@ struct TelemetrySnapshot final {
     std::vector<MetricSample> samples;
     std::size_t retained_correlation_edges{0};
     bool finalized{false};
+    std::vector<PerturbationState> perturbations;
 
     bool operator==(const TelemetrySnapshot&) const = default;
 };

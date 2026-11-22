@@ -22,7 +22,9 @@ std::size_t correlation_edge_count(const Correlation& correlation) noexcept {
            static_cast<std::size_t>(correlation.chunk.has_value()) +
            static_cast<std::size_t>(correlation.routing_decision.has_value()) +
            static_cast<std::size_t>(correlation.placement_decision.has_value()) +
-           static_cast<std::size_t>(correlation.failure.has_value());
+           static_cast<std::size_t>(correlation.failure.has_value()) +
+           static_cast<std::size_t>(correlation.traffic_source.has_value()) +
+           static_cast<std::size_t>(correlation.flow.has_value());
 }
 
 TelemetryRecordKind record_kind(const TelemetryObservation& observation) {
@@ -47,6 +49,8 @@ TelemetryRecordKind record_kind(const TelemetryObservation& observation) {
                 return TelemetryRecordKind::Queue;
             } else if constexpr (std::is_same_v<Observation, FailureObservation>) {
                 return TelemetryRecordKind::Failure;
+            } else if constexpr (std::is_same_v<Observation, LoadObservation>) {
+                return TelemetryRecordKind::Load;
             } else if constexpr (std::is_same_v<Observation, RoutingDecisionObservation>) {
                 return TelemetryRecordKind::RoutingDecision;
             } else {

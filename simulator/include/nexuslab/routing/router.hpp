@@ -10,6 +10,7 @@ struct RoutingConfiguration final {
     std::uint64_t seed{42};
     PathLimits paths{};
     std::size_t maximum_decisions{100'000};
+    bool capacity_metadata{false};
 };
 struct RouteDecision final {
     RouteRequest request;

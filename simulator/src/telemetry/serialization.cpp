@@ -131,6 +131,8 @@ void hash_text(std::uint64_t& hash, std::string_view text) noexcept {
         return "transfer";
     case TelemetryRecordKind::Queue:
         return "queue";
+    case TelemetryRecordKind::Load:
+        return "load";
     case TelemetryRecordKind::Failure:
         return "failure";
     case TelemetryRecordKind::RoutingDecision:
@@ -303,6 +305,14 @@ void hash_text(std::uint64_t& hash, std::string_view text) noexcept {
         return "recovery_started";
     case FailureTransition::Recovered:
         return "recovered";
+    case FailureTransition::JobAffected:
+        return "job_affected";
+    case FailureTransition::TrafficDropped:
+        return "traffic_dropped";
+    case FailureTransition::AdmissionRejected:
+        return "admission_rejected";
+    case FailureTransition::StateObserved:
+        return "state_observed";
     }
     throw std::invalid_argument{"unknown failure telemetry transition"};
 }
@@ -412,13 +422,14 @@ void append_limits(std::string& output, const TelemetryLimits& limits) {
     output.push_back('}');
 }
 
-void append_configuration(std::string& output, const TelemetryConfiguration& configuration) {
+void append_configuration(std::string& output, const TelemetryConfiguration& configuration,
+                          std::uint32_t catalog_version) {
     output += "{\"mode\":";
     append_string(output, mode_name(configuration.mode));
     output += ",\"sample_interval_ns\":";
     append_u64(output, configuration.sample_interval_ns);
     output += ",\"catalog_version\":";
-    append_u64(output, telemetry_catalog_version);
+    append_u64(output, catalog_version);
     output += ",\"limits\":";
     append_limits(output, configuration.limits);
     output.push_back('}');
@@ -454,7 +465,27 @@ void append_common_metadata(std::string& output, std::string_view schema,
         output += "null";
     }
     output += ",\"telemetry\":";
-    append_configuration(output, snapshot.configuration);
+    append_configuration(output, snapshot.configuration,
+                         metadata.script.has_value() ? telemetry_catalog_version_v2
+                                                     : telemetry_catalog_version);
+    if (metadata.script.has_value()) {
+        const auto& script = *metadata.script;
+        output += ",\"failure_script_digest_fnv1a64\":";
+        append_string(output, hex_u64(script.script_digest));
+        output += ",\"domain_outcome_digest_fnv1a64\":";
+        append_string(output, hex_u64(script.outcome_digest));
+        output += ",\"domain_outcome_digest_version\":";
+        append_u64(output, script.outcome_version);
+        output += ",\"capacity_revision\":";
+        append_u64(output, script.capacity_revision);
+        output += ",\"domain_success\":";
+        append_bool(output, script.domain_success);
+        output += ",\"domain_observations_complete\":";
+        append_bool(output, snapshot.configuration.mode != TelemetryMode::Off);
+        output += ",\"records_complete\":";
+        append_bool(output,
+                    metadata.complete && snapshot.configuration.mode == TelemetryMode::Full);
+    }
     output += R"(,"terminal":{"status":)";
     append_string(output, run_outcome_name(metadata.outcome));
     output += ",\"complete\":";
@@ -577,9 +608,147 @@ void append_correlation(std::string& output, const Correlation& correlation) {
     append_correlation_field(output, first, "routing_decision", correlation.routing_decision);
     append_correlation_field(output, first, "placement_decision", correlation.placement_decision);
     append_correlation_field(output, first, "failure", correlation.failure);
+    if (correlation.traffic_source.has_value()) {
+        if (!first) {
+            output.push_back(',');
+        }
+        append_string(output, "traffic_source");
+        output.push_back(':');
+        append_u64(output, *correlation.traffic_source);
+    }
     output.push_back('}');
+    if (correlation.flow.has_value()) {
+        if (!first || correlation.traffic_source.has_value()) {
+            output.push_back(',');
+        }
+        append_string(output, "flow");
+        output.push_back(':');
+        append_u64(output, *correlation.flow);
+    }
 }
 
+template <typename T, typename Value>
+void append_optional(std::string& output, std::string_view key, const std::optional<T>& value,
+                     Value extract) {
+    output.push_back(',');
+    append_string(output, key);
+    output.push_back(':');
+    if (value.has_value()) {
+        append_u64(output, extract(*value));
+    } else {
+        output += "null";
+    }
+}
+void append_capacity(std::string& output, std::string_view key,
+                     const std::optional<std::array<std::uint64_t, 2>>& value) {
+    output.push_back(',');
+    append_string(output, key);
+    output.push_back(':');
+    if (!value.has_value()) {
+        output += "null";
+        return;
+    }
+    output.push_back('[');
+    append_u64(output, value->at(0));
+    output.push_back(',');
+    append_u64(output, value->at(1));
+    output.push_back(']');
+}
+void append_failure_details(std::string& output, const FailureDetails& details) {
+    output += ",\"incident_kind\":";
+    append_u64(output, details.kind);
+    output += ",\"onset_ns\":";
+    append_u64(output, details.onset.count());
+    append_optional(output, "recover_at_ns", details.recovery, [](auto v) { return v.count(); });
+    append_optional(output, "bandwidth_bps", details.bandwidth_bps, [](auto v) { return v; });
+    output += ",\"applied\":";
+    append_bool(output, details.applied);
+    output += ",\"recovered\":";
+    append_bool(output, details.recovered);
+    output += ",\"effective_operational\":";
+    append_bool(output, details.effective_operational);
+    output += ",\"capacity_revision\":";
+    append_u64(output, details.capacity_revision);
+    output += ",\"affected_jobs\":";
+    append_u64(output, details.affected_jobs);
+    output += ",\"dropped_bytes\":";
+    append_u64(output, details.dropped_bytes);
+    output += ",\"dropped_chunks\":";
+    append_u64(output, details.dropped_chunks);
+    append_capacity(output, "baseline_capacity_bps", details.baseline_capacity_bps);
+    append_capacity(output, "effective_capacity_bps", details.effective_capacity_bps);
+}
+void append_routing_request(std::string& output, const RoutingRequestDetails& request) {
+    output += R"(,"request":{"flow":)";
+    append_u64(output, request.flow);
+    output += ",\"source_kind\":";
+    append_u64(output, static_cast<std::uint64_t>(request.source.kind()));
+    output += ",\"source_id\":";
+    append_u64(output, request.source.value());
+    output += ",\"destination_kind\":";
+    append_u64(output, static_cast<std::uint64_t>(request.destination.kind()));
+    output += ",\"destination_id\":";
+    append_u64(output, request.destination.value());
+    output += ",\"bytes\":";
+    append_u64(output, request.bytes);
+    output += ",\"chunk_bytes\":";
+    append_u64(output, request.chunk_bytes);
+    output.push_back('}');
+}
+void append_load(std::string& output, const LoadObservation& load) {
+    output += "{\"traffic_source\":";
+    append_u64(output, load.source);
+    output += ",\"request\":";
+    append_u64(output, load.ordinal);
+    output += ",\"load_kind\":";
+    append_u64(output, load.kind);
+    output += ",\"source_gpu\":";
+    append_u64(output, load.source_gpu.value());
+    output += ",\"destination_gpu\":";
+    append_u64(output, load.destination_gpu.value());
+    output += ",\"scheduled_ns\":";
+    append_u64(output, load.scheduled.count());
+    output += ",\"count\":";
+    append_u64(output, load.count);
+    output += ",\"interval_ns\":";
+    append_u64(output, load.interval_ns);
+    output += ",\"bytes_per_transfer\":";
+    append_u64(output, load.bytes);
+    output += ",\"chunk_bytes\":";
+    append_u64(output, load.chunk_bytes);
+    append_optional(output, "injected_ns", load.injected, [](auto v) { return v.count(); });
+    append_optional(output, "finished_ns", load.finished, [](auto v) { return v.count(); });
+    append_optional(output, "transfer", load.transfer, [](auto v) { return v.value(); });
+    output += ",\"outcome\":";
+    append_u64(output, load.outcome);
+    output += ",\"delivered_bytes\":";
+    append_u64(output, load.delivered.value());
+    output += ",\"buffer_drop_bytes\":";
+    append_u64(output, load.buffer_dropped.value());
+    output += ",\"down_drop_bytes\":";
+    append_u64(output, load.down_dropped.value());
+    output += ",\"delivered_chunks\":";
+    append_u64(output, load.delivered_chunks);
+    output += ",\"buffer_drop_chunks\":";
+    append_u64(output, load.buffer_dropped_chunks);
+    output += ",\"down_drop_chunks\":";
+    append_u64(output, load.down_dropped_chunks);
+}
+void append_failure(std::string& output, const FailureObservation& value) {
+    output += "{\"failure\":";
+    append_u64(output, value.failure.value());
+    output += ",\"transition\":";
+    append_string(output, failure_transition_name(value.transition));
+    output += ",\"resource_kind\":";
+    append_string(output, failure_resource_name(value.resource_kind));
+    output += ",\"resource_id\":";
+    append_u64(output, value.resource_id);
+    output += ",\"affected_bytes\":";
+    append_u64(output, value.affected_bytes);
+    if (value.details.has_value()) {
+        append_failure_details(output, *value.details);
+    }
+}
 void append_observation(std::string& output, const TelemetryObservation& observation) {
     std::visit(
         [&output](const auto& value) {
@@ -673,6 +842,13 @@ void append_observation(std::string& output, const TelemetryObservation& observa
                 }
                 output += ",\"outcome\":";
                 append_string(output, routing_outcome_name(value.outcome));
+                if (value.request.has_value()) {
+                    append_routing_request(output, *value.request);
+                }
+                if (value.capacity_revision.has_value()) {
+                    output += ",\"capacity_revision\":";
+                    append_u64(output, *value.capacity_revision);
+                }
             } else if constexpr (std::is_same_v<Observation, PlacementDecisionObservation>) {
                 output += "{\"decision\":";
                 append_u64(output, value.decision.value());
@@ -696,27 +872,48 @@ void append_observation(std::string& output, const TelemetryObservation& observa
                 append_string(output, value.reason);
                 output += ",\"outcome\":";
                 append_string(output, placement_outcome_name(value.outcome));
+            } else if constexpr (std::is_same_v<Observation, LoadObservation>) {
+                append_load(output, value);
             } else {
                 static_assert(std::is_same_v<Observation, FailureObservation>);
-                output += "{\"failure\":";
-                append_u64(output, value.failure.value());
-                output += ",\"transition\":";
-                append_string(output, failure_transition_name(value.transition));
-                output += ",\"resource_kind\":";
-                append_string(output, failure_resource_name(value.resource_kind));
-                output += ",\"resource_id\":";
-                append_u64(output, value.resource_id);
-                output += ",\"affected_bytes\":";
-                append_u64(output, value.affected_bytes);
+                append_failure(output, value);
             }
             output.push_back('}');
         },
         observation);
 }
 
+bool needs_catalog_v2(const TelemetryObservation& observation) {
+    if (std::holds_alternative<LoadObservation>(observation)) {
+        return true;
+    }
+    if (const auto* failure = std::get_if<FailureObservation>(&observation)) {
+        return failure->details.has_value();
+    }
+    if (const auto* route = std::get_if<RoutingDecisionObservation>(&observation)) {
+        return route->capacity_revision.has_value() || route->request.has_value();
+    }
+    return false;
+}
 void validate_serialization(const TelemetrySnapshot& snapshot,
                             const TelemetryRunMetadata& metadata) {
     validate_configuration(snapshot.configuration);
+    if (!metadata.script.has_value()) {
+        for (const auto& record : snapshot.records) {
+            if (needs_catalog_v2(record.observation) ||
+                record.correlation.traffic_source.has_value() ||
+                record.correlation.flow.has_value()) {
+                throw std::invalid_argument{"catalog-v2 record requires scripted provenance"};
+            }
+        }
+    }
+    if (metadata.script.has_value() &&
+        (metadata.script->outcome_version < 2 || metadata.script->outcome_version > 4)) {
+        throw std::invalid_argument{"unsupported scripted domain outcome version"};
+    }
+    if (!snapshot.perturbations.empty() && !metadata.script.has_value()) {
+        throw std::invalid_argument{"catalog-v2 observations require scripted provenance"};
+    }
     if (!snapshot.finalized) {
         throw std::logic_error{"telemetry must be finalized before serialization"};
     }
@@ -748,6 +945,11 @@ std::string_view run_outcome_name(TelemetryRunOutcome outcome) {
     throw std::invalid_argument{"unknown telemetry run outcome"};
 }
 
+void require_supported_catalog_version(std::uint32_t version) {
+    if (version != telemetry_catalog_version && version != telemetry_catalog_version_v2) {
+        throw std::invalid_argument{"unsupported telemetry catalog version"};
+    }
+}
 void require_supported_schema_version(std::uint32_t version) {
     if (version != telemetry_schema_version) {
         throw std::invalid_argument{"unsupported telemetry schema version"};
@@ -787,7 +989,25 @@ std::string serialize_summary_json(const TelemetrySnapshot& snapshot,
         }
         append_attribution(output, snapshot.job_attributions[index]);
     }
-    output += "]}\n";
+    output += "]";
+    if (metadata.script.has_value()) {
+        output += ",\"perturbations\":[";
+        for (std::size_t i = 0; i < snapshot.perturbations.size(); ++i) {
+            if (i != 0) {
+                output.push_back(',');
+            }
+            const auto& state = snapshot.perturbations[i];
+            output += "{\"timestamp_ns\":";
+            append_u64(output, state.timestamp.count());
+            output += ",\"correlation\":";
+            append_correlation(output, state.correlation);
+            output += ",\"observation\":";
+            append_observation(output, state.observation);
+            output.push_back('}');
+        }
+        output.push_back(']');
+    }
+    output += "}\n";
     enforce_serialized_limit(snapshot, output);
     return output;
 }

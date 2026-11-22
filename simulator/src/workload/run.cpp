@@ -72,21 +72,22 @@ TrainingReport run_training(const TrainingScenario& scenario) {
         }
     }
     transport::TransportRuntime transport{*graph, links, {}, telemetry_sink};
-    routing::Router router{*graph,
-                           transport,
-                           routing::PolicyRegistry{},
-                           {scenario.routing_policy, scenario.seed},
+    routing::RoutingConfiguration routing_configuration{scenario.routing_policy, scenario.seed};
+    routing_configuration.capacity_metadata = scenario.failure_script.has_value();
+    routing::Router router{*graph, transport, routing::PolicyRegistry{}, routing_configuration,
                            telemetry_sink};
     collective::RingExecutor collectives{*graph, router, scenario.local, telemetry_sink};
     WorkloadEngine jobs{*graph, collectives, {}, scenario.scheduling, nullptr, telemetry_sink};
     std::unique_ptr<failures::Runtime> failures;
     if (scenario.failure_script.has_value()) {
         failures = std::make_unique<failures::Runtime>(*scenario.failure_script, *graph, transport,
-                                                       &collectives, &jobs);
+                                                       &collectives, &jobs, failures::Limits{},
+                                                       telemetry_sink);
     }
     std::unique_ptr<traffic::Runtime> loads;
     if (scenario.failure_script.has_value()) {
-        loads = std::make_unique<traffic::Runtime>(scenario.failure_script->loads, *graph, router);
+        loads = std::make_unique<traffic::Runtime>(scenario.failure_script->loads, *graph, router,
+                                                   traffic::Limits{}, telemetry_sink);
     }
     TrainingDispatcher dispatcher{jobs, collectives, transport, failures.get(), loads.get()};
     const sim::TraceMode trace_mode = scenario.telemetry.mode == telemetry::TelemetryMode::Full

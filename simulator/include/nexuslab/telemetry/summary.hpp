@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <tuple>
 #include <vector>
 
 namespace nexuslab::telemetry {
@@ -27,6 +28,12 @@ struct JobAttributionSnapshot final {
     bool operator==(const JobAttributionSnapshot&) const = default;
 };
 
+struct PerturbationState final {
+    sim::SimTimeNs timestamp;
+    Correlation correlation;
+    TelemetryObservation observation;
+    bool operator==(const PerturbationState&) const = default;
+};
 class SummaryBuilder final {
   public:
     explicit SummaryBuilder(
@@ -44,6 +51,7 @@ class SummaryBuilder final {
     [[nodiscard]] std::vector<MetricSeriesSnapshot> metric_snapshots() const;
     [[nodiscard]] std::vector<JobAttributionSnapshot> job_attributions() const;
     [[nodiscard]] bool finalized() const noexcept;
+    [[nodiscard]] std::vector<PerturbationState> perturbations() const;
 
   private:
     enum class JobPhase : std::uint8_t {
@@ -73,6 +81,10 @@ class SummaryBuilder final {
     static void add_interval(JobAttributionSnapshot& snapshot, JobPhase phase,
                              std::uint64_t duration);
 
+    using PerturbationKey = std::tuple<TelemetryRecordKind, std::uint64_t, std::uint64_t>;
+    [[nodiscard]] static std::optional<PerturbationKey>
+    perturbation_key(const TelemetryObservation& observation);
+    std::map<PerturbationKey, PerturbationState> perturbations_;
     MetricRegistry metrics_;
     std::map<workload::JobId, JobState> jobs_;
     std::optional<sim::SimTimeNs> last_timestamp_;

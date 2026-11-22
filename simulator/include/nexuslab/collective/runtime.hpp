@@ -27,6 +27,9 @@ struct NoRouteAdmission final {
     CollectiveId collective;
     routing::Endpoints endpoints;
     sim::SimTimeNs timestamp;
+    std::uint64_t flow;
+    sim::EventId event;
+    std::optional<sim::EventId> cause;
 };
 class RingExecutor final : public CollectiveExecutor {
   public:
